@@ -1,0 +1,6 @@
+carbon
+carbon-unstripped
+
+# Possible .configs that may be present
+kernel.config
+drivers.config

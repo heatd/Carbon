@@ -1,0 +1,14 @@
+*.o
+*.lo
+*.img
+daemon
+*.map
+*.iso
+sysroot
+.directory
+.vscode
+*.pcap
+*.pcapng
+*.sha256sum
+*.a
+*.so
