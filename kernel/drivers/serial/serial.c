@@ -92,6 +92,12 @@ struct console serial_console =
 
 void x86_serial_init(void)
 {
+	/* Check if com0 exists by writing to the scratch register and
+	 reading it back
+	*/
+	outb(0x3f8 + 7, 0xAA);
+	if(inb(0x3f8 + 7) != 0xAA)
+		return;
 	com1 = ksbrk(sizeof(struct serial_port));
 	
 	com1->io_port = 0x3f8;

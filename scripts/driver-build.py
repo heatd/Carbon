@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python3
 
 # We start with an empty list and we start filling it up as we discover drivers
 drivers = []

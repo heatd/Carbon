@@ -55,10 +55,73 @@ EFI_SYSTEM_TABLE *get_system_table(void)
 	return boot_info->SystemTable;
 }
 
+unsigned int get_highest_bit(UINT32 u)
+{
+	unsigned int r = 0;
+	for(int i = 0; i < 32; i++)
+	{
+		if(u & (1 << i))
+			r = i;
+	}
+
+	return r;
+}
+
+#define max(x, y) ((x > y) ? x : y)
+
+unsigned int gop_get_bpp(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info)
+{
+	if(info->PixelFormat == PixelBltOnly)
+			return 0;
+	if(info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+	{
+		boot_info->fb.color.red_mask = 0x00ff0000;
+		boot_info->fb.color.green_mask = 0x0000ff00;
+		boot_info->fb.color.blue_mask = 0x000000ff;
+		boot_info->fb.color.resv_mask = 0xff000000;
+		boot_info->fb.color.red_shift = 16;
+		boot_info->fb.color.green_shift = 8;
+		boot_info->fb.color.blue_shift = 0;
+		boot_info->fb.color.resv_shift = 24;
+		return 32;
+	}
+	else if(info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor)
+	{
+		boot_info->fb.color.red_mask = 0x000000ff;
+		boot_info->fb.color.green_mask = 0x0000ff00;
+		boot_info->fb.color.blue_mask = 0x00ff0000;
+		boot_info->fb.color.resv_mask = 0xff000000;
+		boot_info->fb.color.red_shift = 0;
+		boot_info->fb.color.green_shift = 8;
+		boot_info->fb.color.blue_shift = 16;
+		boot_info->fb.color.resv_shift = 24;
+		return 32;
+	}
+	else if(info->PixelFormat == PixelBitMask)
+	{
+		unsigned int red_bit = get_highest_bit(info->PixelInformation.RedMask);
+		unsigned int blue_bit = get_highest_bit(info->PixelInformation.BlueMask);
+		unsigned int green_bit = get_highest_bit(info->PixelInformation.GreenMask);
+		unsigned int resv_bit = get_highest_bit(info->PixelInformation.ReservedMask);
+
+		unsigned int bpp = max(resv_bit, max(green_bit, max(red_bit, blue_bit)));
+		boot_info->fb.color.red_mask = info->PixelInformation.RedMask;
+		boot_info->fb.color.blue_mask = info->PixelInformation.BlueMask;
+		boot_info->fb.color.green_mask = info->PixelInformation.GreenMask;
+		boot_info->fb.color.resv_mask = info->PixelInformation.ReservedMask;
+
+		boot_info->fb.color.red_shift = red_bit;
+		boot_info->fb.color.green_shift = green_bit;
+		boot_info->fb.color.blue_shift = blue_bit;
+		boot_info->fb.color.resv_shift = resv_bit;
+		return bpp + 1;
+	}
+}
 int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 {
 	EFI_STATUS st = 0;
 	EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
+	EFI_GUID edid_guid = EFI_EDID_ACTIVE_PROTOCOL_GUID;
 	EFI_GUID guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 	st = SystemTable->BootServices->LocateProtocol(&guid, NULL, (void**) &gop);
 	if(st != EFI_SUCCESS)
@@ -66,7 +129,9 @@ int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 		Print(L"Failed to get the GOP protocol - error code 0x%x\n", st);
 		return -1;
 	}
+
 	EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *mode = gop->Mode;
+#if 0
 	UINT32 to_be_set = 0;
 	/* We're picking the biggest graphics framebuffer out of them all (it's usually a good idea) */
 	UINT32 total_space = 0;
@@ -82,6 +147,9 @@ int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 			return -1;
 		}
 		
+		Print(L"Pixel format: %lx\n", info->PixelFormat);
+		Print(L"%u x %u\n", info->HorizontalResolution, info->VerticalResolution);
+
 		/* Ignore non-linear video modes */
 		if(info->PixelFormat == PixelBltOnly)
 			continue;
@@ -92,7 +160,12 @@ int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 			/* How should this work? I think this works kinda fine? I'm not sure we even want 
 			 * to support non-32 bit pixel formats
 			*/
-			bpp = 32;
+			Print(L"Red: %x Green: %x Blue: %x Reserved: %x",
+                          info->PixelInformation.RedMask,
+                          info->PixelInformation.GreenMask,
+                          info->PixelInformation.BlueMask,
+                          info->PixelInformation.ReservedMask);
+			bpp = 24;
 		}
 		UINT32 fb_size = info->HorizontalResolution * info->VerticalResolution * (bpp / 8);
 		if(fb_size > total_space)
@@ -101,16 +174,23 @@ int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 			total_space = fb_size;
 		}
 	}
-	/* Set the video mode */
-	gop->SetMode(gop, to_be_set);
+#endif
 	mode = gop->Mode;
+
 	boot_info->fb.framebuffer = mode->FrameBufferBase;
 	boot_info->fb.framebuffer_size = mode->FrameBufferSize;
-	boot_info->fb.height = mode->Info->HorizontalResolution;
-	boot_info->fb.width = mode->Info->VerticalResolution;
-	boot_info->fb.pitch = mode->Info->PixelsPerScanLine;
-	/* TODO: This shouldn't be a thing? */
-	boot_info->fb.bpp = 32;
+	boot_info->fb.height = mode->Info->VerticalResolution;
+	boot_info->fb.width = mode->Info->HorizontalResolution;
+
+	boot_info->fb.bpp = gop_get_bpp(mode->Info);
+	boot_info->fb.pitch = mode->Info->PixelsPerScanLine * (boot_info->fb.bpp/8);
+	
+	if(boot_info->fb.bpp == 0)
+	{
+		Print(L"efibootldr: Invalid graphics mode!\n");
+		while(1);
+	}
+
 	return 0;
 }
 
@@ -296,6 +376,8 @@ int efi_exit_firmware(void *entry, EFI_SYSTEM_TABLE *SystemTable, EFI_HANDLE Ima
 	UINTN key;
 	UINTN desc_size;
 	UINT32 desc_ver;
+	
+	Print(L"Brace yourselves, exiting firmware!\n");
 	EFI_MEMORY_DESCRIPTOR *map = LibMemoryMap(&nr_entries, &key, &desc_size, &desc_ver);
 	if(!map)
 	{
@@ -306,12 +388,13 @@ int efi_exit_firmware(void *entry, EFI_SYSTEM_TABLE *SystemTable, EFI_HANDLE Ima
 	boot_info->mmap.descriptors = map;
 	boot_info->mmap.nr_descriptors = nr_entries;
 	boot_info->mmap.size_descriptors = desc_size;
-	
+
 	if((st = SystemTable->BootServices->ExitBootServices(ImageHandle, key)) != EFI_SUCCESS)
 	{
 		Print(L"Error: ExitBootServices: Could not exit the boot services - error code 0x%x\n", st);
 		return -1;
 	}
+
 	void (*entry_point)(struct boot_info *boot) = (void (*)(struct boot_info*)) entry;
 	entry_point(boot_info);
 	return 0;
@@ -329,7 +412,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
 	EFI_FILE_PROTOCOL *root;
 	InitializeLib(ImageHandle, SystemTable);
-	Print(L"efibootldr - booting...\n");
 
 	if(SystemTable->BootServices->AllocatePool(EfiLoaderData,
 		sizeof(struct boot_info), (void**) &boot_info) != EFI_SUCCESS)
@@ -344,6 +426,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 	if(initialize_graphics(SystemTable) < 0)
 		return EFI_LOAD_ERROR;
 	SystemTable->ConOut->ClearScreen(SystemTable->ConOut);
+
+	Print(L"efibootldr - booting...\n");
 
 	initialize_entropy(SystemTable);
 	
@@ -368,12 +452,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 		return EFI_LOAD_ERROR;
 	}
 
+	Print(L"Loading initrd\n");
 	void *entry_point = NULL;
 	if(load_initrd(root, SystemTable) < 0)
 		return EFI_LOAD_ERROR;
-	
+
 	CopyMem(&boot_info->entropy, entropy, NR_ENTROPY);
 
+	Print(L"Loading kernel\n");
 	if((entry_point = load_kernel(root, SystemTable)) == NULL)
 		return EFI_LOAD_ERROR;
 	/* Exit the firmware and run the kernel */

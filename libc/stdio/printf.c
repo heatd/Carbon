@@ -16,3 +16,8 @@ int printf(const char *fmt, ...)
 	memset(print_buffer, 0, sizeof(print_buffer));
 	return result;
 }
+
+int puts(const char *s)
+{
+	return printf("%s\n", s);
+}

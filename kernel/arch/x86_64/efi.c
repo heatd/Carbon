@@ -6,10 +6,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <carbon/memory.h>
 #include <carbon/bootprotocol.h>
 #include <carbon/x86/serial.h>
+#include <carbon/framebuffer.h>
 
 bool uefi_unusable_region(EFI_MEMORY_DESCRIPTOR *desc)
 {
@@ -64,13 +66,11 @@ void efi_setup_physical_memory(struct boot_info *info)
 	{
 		if((descriptors->PhysicalStart + descriptors->NumberOfPages * PAGE_SIZE) > memory)
 			memory = descriptors->PhysicalStart + descriptors->NumberOfPages * PAGE_SIZE;
-		printf("Desc: %p\n", descriptors);
-		printf("Region %016lx-%016lx\n", descriptors->PhysicalStart,
-				descriptors->PhysicalStart +
-				descriptors->NumberOfPages * PAGE_SIZE);
-		printf("Type: %x\n", descriptors->Type);
 		if(!uefi_unusable_region(descriptors))
 		{
+			printf("Free region %016lx-%016lx\n", descriptors->PhysicalStart,
+				descriptors->PhysicalStart +
+				descriptors->NumberOfPages * PAGE_SIZE);
 			page_add_region(descriptors->PhysicalStart,
 				descriptors->NumberOfPages * PAGE_SIZE, info);
 		}
@@ -78,10 +78,35 @@ void efi_setup_physical_memory(struct boot_info *info)
 	
 }
 
+struct framebuffer efi_fb =
+{
+	.name = "efi_fb"
+};
+
+void vterm_initialize(void);
+
+void efi_setup_framebuffer(struct boot_info *info)
+{
+	printf("efifb: Framebuffer %lx\n", info->fb.framebuffer);
+	efi_fb.framebuffer = phys_to_virt(info->fb.framebuffer);
+	efi_fb.framebuffer_phys = info->fb.framebuffer;
+	efi_fb.framebuffer_size = info->fb.framebuffer_size;
+	efi_fb.width = info->fb.width;
+	efi_fb.height = info->fb.height;
+	efi_fb.pitch = info->fb.pitch;
+	efi_fb.bpp = info->fb.bpp;
+	efi_fb.color = info->fb.color;
+
+	memset(efi_fb.framebuffer, 0, efi_fb.framebuffer_size);
+	set_framebuffer(&efi_fb);
+
+	vterm_initialize();
+}
+
 void efi_entry(struct boot_info *info)
 {
-	x86_setup_physical_mappings();
 	x86_serial_init();
+	x86_setup_physical_mappings();
 
 	/* Fixup boot info */
 	info = phys_to_virt(info);
@@ -94,6 +119,9 @@ void efi_entry(struct boot_info *info)
 		m->next = phys_to_virt(m->next);
 	}
 
+	efi_setup_framebuffer(info);
+
 	efi_setup_physical_memory(info);
 
+	printf("carbon: Starting kernel.\n");
 }
