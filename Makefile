@@ -75,5 +75,7 @@ iso: fullbuild
 qemu: iso
 	qemu-system-$(shell ./target-triplet-to-arch.sh $(HOST)) \
 	-s -cdrom Carbon.iso -m 512M \
-	-monitor stdio -boot d -net nic,model=e1000 -net dump,file=net.pcap -net user \
-	--enable-kvm -smp 2 -cpu IvyBridge,+avx -d int -vga std -bios OVMF.fd -no-reboot -no-shutdown
+	-monitor stdio -boot d -netdev user,id=u1 -device e1000,netdev=u1 \
+	-object filter-dump,id=f1,netdev=u1,file=net.pcap \
+	--enable-kvm -smp 2 -cpu host,migratable=no -d int -vga std \
+	-bios OVMF.fd -no-reboot -no-shutdown -usb

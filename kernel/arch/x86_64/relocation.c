@@ -4,7 +4,9 @@
 * check LICENSE at the root directory for more information
 */
 #include <stdint.h>
+#include <string.h>
 
+#include <carbon/memory.h>
 #include <carbon/bootprotocol.h>
 
 #define RELOCATE_R_X86_64_64(S, A) (S + A)
@@ -21,6 +23,8 @@
 #define R_X86_64_PC32	2
 #define R_X86_64_32	10
 #define R_X86_64_32S	11
+
+uintptr_t kernel_base = 0;
 
 void do_r_x86_64_none(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
 {}
@@ -45,22 +49,15 @@ void do_r_x86_64_32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
 
 void do_r_x86_64_pc32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
 {
-	/* PC32 relocations don't need to be handled as we're not linking anything */
-	if(1)
-		return;
 	uint32_t *p = (uint32_t *) pc;
 
-	*p = RELOCATE_R_X86_64_PC32(symbol, addend, pc);
+	*p = RELOCATE_R_X86_64_PC32(symbol - kernel_base, addend, pc);
 }
 
 void do_r_x86_64_plt32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
 {
-	/* PLT32 relocations don't need to be handled as we're not linking anything */
-	if(1)
-		return;
-	uint32_t *p = (uint32_t *) pc;
-
-	*p = RELOCATE_R_X86_64_PC32(symbol, addend, pc);
+	while(1)
+		__asm__ __volatile__("hlt");		/* Bad reloc */
 }
 
 extern uint64_t pml4[4096];
@@ -69,6 +66,7 @@ extern uint64_t pdpt2[4096];
 extern uint64_t pdlower[4096];
 extern uint64_t pdhigher[4096];
 
+__attribute__((section(".boot")))
 void remap_kernel(uintptr_t base_address)
 {
 	const unsigned int paging_levels = 4;
@@ -78,43 +76,53 @@ void remap_kernel(uintptr_t base_address)
 	{
 		indices[i] = (base_address >> 12) >> (i * 9) & 0x1ff;
 	}
-	(void) indices;
+
+	uint64_t *__pdpt2 = (uint64_t *) &pdpt2;
+	uint64_t *__pdlower = (uint64_t *) &pdlower;
+
 	uint64_t *pml = pml4;
 	for(unsigned int i = paging_levels; i != 1; i--)
 	{
 		if(i == 4)
 		{
+			memset(pml, 0, PAGE_SIZE);
 			pml[indices[i - 1]] = (uint64_t) pdpt | 0x3;
 			pml[0] = (uint64_t) pdpt2 | 0x3;
-			
+
 			pml = pdpt;
 		}
 		else if(i == 3)
 		{
+			memset(pml, 0, PAGE_SIZE);
+			memset(__pdpt2, 0, PAGE_SIZE);
 			pml[indices[i - 1]] = (uint64_t) pdhigher | 0x3;
-			pdpt2[0] = (uint64_t) pdlower | 0x3;
+			__pdpt2[0] = (uint64_t) pdlower | 0x3;
 
 			pml = pdhigher;
 		}
 		else if(i == 2)
 		{
 			unsigned int base_index = indices[i - 1];
+			memset(pml, 0, PAGE_SIZE);
+			memset(__pdlower, 0, PAGE_SIZE);
 			pml[base_index] = 0x0 | 0x83;
 			pml[base_index + 1] = 0x200000 | 0x83;
 			pml[base_index + 2] = 0x400000 | 0x83;
 
-			pdlower[0] = 0x0 | 0x83;
-			pdlower[1] = 0x200000 | 0x83;
-			pdlower[2] = 0x400000 | 0x83;
+			__pdlower[0] = 0x0 | 0x83;
+			__pdlower[1] = 0x200000 | 0x83;
+			__pdlower[2] = 0x400000 | 0x83;
 		}
 	}
-
 }
 
+__attribute__((section(".boot")))
 void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 {
 	remap_kernel(base_address);
-	
+#ifdef CONFIG_RELOCATABLE
+	kernel_base = base_address;
+
 	struct relocation *r;
 	void (*reloc_jmp_tab[])(uintptr_t symbol, uintptr_t addend, uintptr_t pc) =
 	{
@@ -133,4 +141,6 @@ void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 		r->symbol_value += base_address;
 		reloc_jmp_tab[r->type](r->symbol_value, r->addend, (uintptr_t) r->address);
 	}
+#endif
+
 }

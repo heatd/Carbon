@@ -3,6 +3,9 @@
 * This file is part of Carbon, and is released under the terms of the MIT License
 * check LICENSE at the root directory for more information
 */
+#include <carbon/x86/msr.h>
+
+#define ENTROPY_BITS	29
 #define NR_ENTROPY	32
 .section .bss
 .align 4
@@ -37,28 +40,43 @@ calculate_base_address:
 	/* Get the first 4 bytes of entropy and use them to calculate the base address */
 	xor %rax, %rax
 	mov (%rdi), %rax
-	mov $0xffffffff80000000, %rax
+
+#ifdef CONFIG_RELOCATABLE
+	and $((1 << ENTROPY_BITS) - 1), %rax
+	or $0xffffffff80000000, %rax
 	and $-0x1000000, %rax
+#else
+	mov $0xffffffff80000000, %rax
+#endif
+
 	movq %rax, base_address
 	ret
 .global _start
 _start:
 	cli
+	mov $(EFER_SCE | EFER_NXE | EFER_LME), %rax
+	xor %rdx, %rdx
+	mov $MSR_EFER, %rcx
+	wrmsr
+
 	call calculate_base_address
 	mov %rax, %rsi
 	mov $pml4, %rax
 	push %rdi
 	push %rax
+	#hlt
 	call relocate_kernel
 	pop %rax
 	pop %rdi
+
 	mov %rax, %cr3
 	mov $.higher, %rax
 	jmp *%rax
 .higher:
 	mov $stack_top, %rsp
 	lidt idt
-	call efi_entry
+	mov $efi_entry, %rax
+	call *%rax
 	cli
 .halt:
 	hlt

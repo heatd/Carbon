@@ -179,7 +179,7 @@ void *elf_load(void *buffer, size_t size)
 				return NULL;
 			}
 			CopyMem((void*) phdr->p_paddr, (void*) ((char *) buffer + phdr->p_offset), phdr->p_filesz);
-			SetMem((void*) (char*) phdr->p_paddr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
+			SetMem((void*) (char*) phdr->p_paddr + phdr->p_filesz, phdr->p_memsz - phdr->p_filesz, 0);
 		}
 	}
 

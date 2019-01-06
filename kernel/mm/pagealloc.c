@@ -15,6 +15,9 @@
 
 #define min(t1, t2) (t1 < t2 ? t1 : t2)
 
+size_t avail_pool = 0;
+unsigned char *pool = NULL;
+
 static inline unsigned long pow2(int exp)
 {
 	return (1UL << (unsigned long) exp);
@@ -106,7 +109,7 @@ void *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct page_ar
 			head->next = tail;
 		else
 			arena->page_list = tail;
-		
+
 		if(tail)
 			tail->prev = head;
 
@@ -223,12 +226,19 @@ static void append_arena(struct page_cpu *cpu, struct page_arena *arena)
 	*a = arena;
 }
 
+static void *alloc_pool(size_t size)
+{
+	void *ret = pool;
+	pool += size;
+	return ret;
+}
+
 void page_add_region(uintptr_t base, size_t size, struct boot_info *info)
 {
 	while(size)
 	{
 		size_t area_size = min(size, 0x200000);
-		struct page_arena *arena = ksbrk(sizeof(struct page_arena));
+		struct page_arena *arena = alloc_pool(sizeof(struct page_arena));
 		assert(arena != NULL);
 		memset_s(arena, 0, sizeof(struct page_arena));
 
@@ -283,6 +293,14 @@ void __free_pages(void *pages, int order)
 void __free_page(void *page)
 {
 	__free_pages(page, 0);
+}
+
+void *efi_allocate_early_boot_mem(size_t size);
+
+void page_reserve_memory(size_t memory)
+{
+	avail_pool = (memory / 0x200000) * sizeof(struct page_arena);
+	pool = efi_allocate_early_boot_mem(avail_pool);
 }
 
 #if 0

@@ -10,6 +10,9 @@
 #include <assert.h>
 
 #include <carbon/memory.h>
+#include <carbon/page.h>
+
+#define PML_EXTRACT_ADDRESS(n) (n & 0x0FFFFFFFFFFFF000)
 
 typedef struct
 {
@@ -110,7 +113,14 @@ static inline uint64_t make_pml1e(uint64_t base,
   		p);
 }
 
+struct address_space
+{
+	PML *pml;
+};
+
 PML *boot_pml4;
+struct address_space boot_address_space;
+
 static PML pdptphysical_map __attribute__((aligned(4096)));
 static PML pdphysical_map[512] __attribute__((aligned(4096)));
 
@@ -125,6 +135,7 @@ void x86_setup_physical_mappings(void)
 	/* Get the current PML4 and store it */
 	__asm__ __volatile__("movq %%cr3, %%rax\t\nmovq %%rax, %0":"=r"(boot_pml4));
 
+	boot_address_space.pml = boot_pml4;
 	uintptr_t virt = PHYS_BASE;
 	assert(((virt >> 12) >> 18 & 0x1ff) == 0);
 
@@ -154,4 +165,81 @@ void x86_setup_physical_mappings(void)
 	}
 
 	__native_tlb_invalidate_all();
+}
+
+void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
+unsigned long prot)
+{
+	struct address_space *aspace = addr;
+ 
+	const unsigned int paging_levels = 4;
+	unsigned int indices[paging_levels];
+
+	bool is_write = prot & PAGE_PROT_WRITE;
+	bool is_user = prot & PAGE_PROT_USER;
+	bool is_global = prot & PAGE_PROT_GLOBAL;
+	bool is_nx = !(prot & PAGE_PROT_EXECUTE);
+
+	for(unsigned int i = 0; i < paging_levels; i++)
+	{
+		indices[i] = (virt >> 12) >> (i * 9) & 0x1ff;
+	}
+
+	PML *pml = (PML*)((uint64_t) aspace->pml + PHYS_BASE);
+	
+	for(unsigned int i = paging_levels; i != 1; i--)
+	{
+		uint64_t entry = pml->entries[indices[i - 1]];
+		if(entry & 1)
+		{
+			void *page = (void*) PML_EXTRACT_ADDRESS(entry);
+			pml = phys_to_virt(page);
+		}
+		else
+		{
+			void *page = __alloc_page(0);
+			if(!page)
+				return NULL;
+			memset(phys_to_virt(page), 0, PAGE_SIZE);
+			if(i == 3)
+			{
+				pml->entries[indices[i - 1]] =
+				make_pml4e((uint64_t) page, 0, 0, 0, is_user,
+					1, 1);
+			}
+			else
+			{
+				pml->entries[indices[i - 1]] =
+				make_pml3e((uint64_t) page, 0, 0, 0, 0, 0,
+					is_user, 1, 1);
+			}
+			pml = phys_to_virt(page);
+		}
+	}
+	
+	pml->entries[indices[0]] = make_pml1e(phys, is_nx, 0,
+		is_global, 0, 0, is_user, is_write, 1);
+	return (void*) virt;
+}
+
+HANDLE get_address_space_handle(void)
+{
+	return &boot_address_space;
+}
+
+void *map_phys_to_virt(uintptr_t virt, uintptr_t phys, unsigned long prot)
+{
+	HANDLE addr = get_address_space_handle();
+	return __map_phys_to_virt(addr, virt, phys, prot);
+}
+
+void flush_tlb(void *addr, size_t nr_pages)
+{
+	uintptr_t i = (uintptr_t) addr;
+
+	do
+	{
+		__native_tlb_invalidate_page((void *) i);
+		i += PAGE_SIZE;
+	} while(--nr_pages);
 }

@@ -12,3 +12,10 @@ void __assert_fail(const char * assertion, const char * file,
 		file, line, function);
 	__asm__ __volatile__("cli;hlt");
 }
+
+void panic(char *msg)
+{
+	printf("panic: %s\n", msg);
+
+	__asm__ __volatile__("cli;hlt");
+}

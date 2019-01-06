@@ -7,11 +7,17 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #include <carbon/memory.h>
 #include <carbon/bootprotocol.h>
 #include <carbon/x86/serial.h>
 #include <carbon/framebuffer.h>
+#include <carbon/page.h>
+#include <carbon/x86/idt.h>
+#include <carbon/vm.h>
+
+struct boot_info *boot_info = NULL;
 
 bool uefi_unusable_region(EFI_MEMORY_DESCRIPTOR *desc)
 {
@@ -56,16 +62,59 @@ bool uefi_unusable_region(EFI_MEMORY_DESCRIPTOR *desc)
 	return false;
 }
 
+void *__efi_allocate_early_boot_mem(size_t size)
+{
+	size_t desc_size = boot_info->mmap.size_descriptors;
+	EFI_MEMORY_DESCRIPTOR *descriptors = boot_info->mmap.descriptors;
+
+	for(UINTN i = 0; i < boot_info->mmap.nr_descriptors; i++, descriptors =
+		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size))
+	{
+		if(!uefi_unusable_region(descriptors))
+		{
+			if(descriptors->NumberOfPages << PAGE_SHIFT >= size)
+			{
+				descriptors->NumberOfPages -= size >> PAGE_SHIFT;
+				void *ret = phys_to_virt(descriptors->PhysicalStart);
+				descriptors->PhysicalStart += size;
+				descriptors->VirtualStart += size;
+
+				return ret;
+			}
+		}
+	}
+}
+
+#define ALIGN_TO(x, y) (((unsigned long)x + (y - 1)) & -y)
+
+void *efi_allocate_early_boot_mem(size_t size)
+{
+	size = ALIGN_TO(size, PAGE_SIZE);
+
+	return __efi_allocate_early_boot_mem(size);
+}
+
 void efi_setup_physical_memory(struct boot_info *info)
 {
 	size_t desc_size = info->mmap.size_descriptors;
 	size_t memory = 0;
 	EFI_MEMORY_DESCRIPTOR *descriptors = info->mmap.descriptors;
+
 	for(UINTN i = 0; i < info->mmap.nr_descriptors; i++, descriptors =
 		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size))
 	{
-		if((descriptors->PhysicalStart + descriptors->NumberOfPages * PAGE_SIZE) > memory)
-			memory = descriptors->PhysicalStart + descriptors->NumberOfPages * PAGE_SIZE;
+		if(!uefi_unusable_region(descriptors))
+		{
+			memory += descriptors->NumberOfPages * PAGE_SIZE;
+		}
+	}
+
+	page_reserve_memory(memory);
+
+	descriptors = info->mmap.descriptors;
+	for(UINTN i = 0; i < info->mmap.nr_descriptors; i++, descriptors =
+		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size))
+	{
 		if(!uefi_unusable_region(descriptors))
 		{
 			printf("Free region %016lx-%016lx\n", descriptors->PhysicalStart,
@@ -75,7 +124,6 @@ void efi_setup_physical_memory(struct boot_info *info)
 				descriptors->NumberOfPages * PAGE_SIZE, info);
 		}
 	}
-	
 }
 
 struct framebuffer efi_fb =
@@ -87,7 +135,7 @@ void vterm_initialize(void);
 
 void efi_setup_framebuffer(struct boot_info *info)
 {
-	printf("efifb: Framebuffer %lx\n", info->fb.framebuffer);
+	//printf("efifb: Framebuffer %lx\n", info->fb.framebuffer);
 	efi_fb.framebuffer = phys_to_virt(info->fb.framebuffer);
 	efi_fb.framebuffer_phys = info->fb.framebuffer;
 	efi_fb.framebuffer_size = info->fb.framebuffer_size;
@@ -98,10 +146,13 @@ void efi_setup_framebuffer(struct boot_info *info)
 	efi_fb.color = info->fb.color;
 
 	memset(efi_fb.framebuffer, 0, efi_fb.framebuffer_size);
+
 	set_framebuffer(&efi_fb);
 
 	vterm_initialize();
 }
+
+void heap_set_start(uintptr_t heap_start);
 
 void efi_entry(struct boot_info *info)
 {
@@ -112,16 +163,27 @@ void efi_entry(struct boot_info *info)
 	info = phys_to_virt(info);
 	info->command_line = phys_to_virt(info->command_line);
 	info->mmap.descriptors = phys_to_virt(info->mmap.descriptors);
-	info->modules = phys_to_virt(info->modules);
+	if(info->modules) info->modules = phys_to_virt(info->modules);
 
 	for(struct module *m = info->modules; m != NULL && m->next != NULL; m = m->next)
 	{
 		m->next = phys_to_virt(m->next);
 	}
 
+	boot_info = info;
+
 	efi_setup_framebuffer(info);
+
+	printf("carbon: Starting kernel.\n");
 
 	efi_setup_physical_memory(info);
 
-	printf("carbon: Starting kernel.\n");
+	x86_init_exceptions();
+
+	uintptr_t heap_start = 0xffffa00000000000;
+	heap_set_start(heap_start);
+
+	vm_init();
+	while(1)
+		__asm__ __volatile__("hlt");
 }

@@ -17,9 +17,6 @@ KERN_IN_TREE_BUILD:=yes
 
 # -fstack-protector-strong
 
-CFLAGS:=$(CFLAGS) -ffreestanding -fbuiltin -Wall -Wextra \
--Wno-unused-parameter -Wno-unused-function -Werror -fpie -DPIC -static
-
 CPPFLAGS:=$(CPPFLAGS) -D__is_carbon_kernel -D_POSIX_C_SOURCE -D_BSD_SOURCE -Iinclude \
 -Iinclude/acpica -isystem ../libc/include -DKERNEL_VERSION='"$(KERNEL_VERSION)"' \
 -DKERNEL_BRANCH='"$(KERNEL_BRANCH)"' -DKERNEL_ARCH='"$(KERNEL_ARCH)"' -imacros \
@@ -29,14 +26,22 @@ LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib
 ARCHDIR:=arch/$(HOSTARCH)
 
-include $(ARCHDIR)/make.config
 include kernel.config
 include drivers.config
+
+include $(ARCHDIR)/make.config
+
+CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -Wall -Wextra \
+-Wno-unused-parameter -Wno-unused-function -static
+
+ifeq ($(CONFIG_RELOCATABLE), y)
+CFLAGS+=-fpie -DPIC -fno-plt -fno-jump-tables
+endif
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
 CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D ACPI_LIBRARY -D ACPI_DEBUG_OUTPUT=1 \
 -I/usr/include/efi -I/usr/include/efi/x86_64 -I/usr/include/efi/protocol # Needed for EFI
-LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
+LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS) -fwhole-program
 LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS) -lk -lgcc
 ACPICA_CFLAGS:=$(filter-out -fsanitize=undefined -fsanitize=address -Werror, $(CFLAGS))
 
@@ -75,9 +80,9 @@ all: onyx-vdso.so.0 carbon
 
 .PHONY: all clean install install-headers install-kernel kernel-modules drivers
 
-carbon: $(OBJ_LINK_LIST) $(ARCHDIR)/linker.ld
+carbon: $(OBJ_LINK_LIST) $(ARCHDIR)/$(LINKER_SCRIPT_NAME)
 	@echo [LD] $@
-	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(CFLAGS) $(OBJ_LINK_LIST) $(LDFLAGS) $(LIBS)
+	$(CC) -T $(ARCHDIR)/$(LINKER_SCRIPT_NAME) -o $@ $(CFLAGS) $(OBJ_LINK_LIST) $(LDFLAGS) $(LIBS)
 	cp carbon carbon-unstripped
 	strip -g carbon
 
@@ -87,7 +92,7 @@ acpica/%.o: acpica/%.c
 
 %.o: %.c
 	@echo [CC] $<
-	@$(CC) -c $< -o $@ -std=c11 $(CFLAGS) $(CPPFLAGS) -Wno-error=deprecated-declarations
+	$(CC) -c $< -o $@ -std=c11 $(CFLAGS) $(CPPFLAGS) -Wno-error=deprecated-declarations
 
 %.o: %.S
 	@echo [AS] $<
@@ -102,7 +107,7 @@ carbon-vdso.so.0: $(ARCHDIR)/__vdso.o
 	@echo [VDSO]
 	@$(CC) $< -o $@ -shared -fpic -ffreestanding -nostdlib $(CFLAGS) -z max-page-size=0x1000
 clean:
-	rm -f carbon $(OBJS) $(ALL_OUR_OBJS) *.o */*.o */*/*.o
+	rm -f carbon carbon-unstripped $(OBJS) $(ALL_OUR_OBJS) *.o */*.o */*/*.o
 	rm -f include/carbon/config.h
 	rm -f drivers.config
 

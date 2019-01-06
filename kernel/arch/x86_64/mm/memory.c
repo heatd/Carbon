@@ -11,11 +11,6 @@ extern char kernel_start[0];
 extern char kernel_end[0];
 
 extern uintptr_t base_address;
-struct kernel_limits
-{
-	uintptr_t start_phys, start_virt;
-	uintptr_t end_phys, end_virt;
-};
 
 
 uintptr_t get_kernel_base_address(void)

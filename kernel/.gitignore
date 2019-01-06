@@ -1,6 +1,8 @@
 carbon
 carbon-unstripped
 
+/carbon
+
 # Possible .configs that may be present
 kernel.config
 drivers.config

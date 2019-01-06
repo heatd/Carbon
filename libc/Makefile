@@ -1,7 +1,7 @@
 ALL_OBJS:=$(patsubst %.c,%.o,$(wildcard */*.c)) \
 $(patsubst %.cpp,%.o,$(wildcard */*.cpp))
 
-CFLAGS+=-mno-red-zone -mno-sse -mno-sse2 -fPIC -DPIC
+CFLAGS+=-mno-red-zone -mno-sse -mno-sse2 -fpie -DPIC -fno-plt -fno-jump-tables
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
