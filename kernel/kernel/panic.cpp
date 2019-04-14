@@ -5,7 +5,7 @@
 */
 #include <stdio.h>
 
-void __assert_fail(const char * assertion, const char * file,
+extern "C" void __assert_fail(const char * assertion, const char * file,
 	unsigned int line, const char * function)
 {
 	printf("Assertion %s failed in %s:%u, in function %s\n", assertion,
@@ -13,7 +13,7 @@ void __assert_fail(const char * assertion, const char * file,
 	__asm__ __volatile__("cli;hlt");
 }
 
-void panic(char *msg)
+extern "C" void panic(const char *msg)
 {
 	printf("panic: %s\n", msg);
 

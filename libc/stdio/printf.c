@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include <carbon/tty.h>
+#include <carbon/console.h>
 
 static char print_buffer[200000] = {0};
 

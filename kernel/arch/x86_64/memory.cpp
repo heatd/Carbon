@@ -170,7 +170,7 @@ void x86_setup_physical_mappings(void)
 void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 unsigned long prot)
 {
-	struct address_space *aspace = addr;
+	struct address_space *aspace = (struct address_space *) addr;
  
 	const unsigned int paging_levels = 4;
 	unsigned int indices[paging_levels];
@@ -193,13 +193,14 @@ unsigned long prot)
 		if(entry & 1)
 		{
 			void *page = (void*) PML_EXTRACT_ADDRESS(entry);
-			pml = phys_to_virt(page);
+			pml = (PML *) phys_to_virt(page);
 		}
 		else
 		{
-			void *page = __alloc_page(0);
-			if(!page)
+			struct page *p = alloc_pages(1, 0);
+			if(!p)
 				return NULL;
+			void *page = p->paddr;
 			memset(phys_to_virt(page), 0, PAGE_SIZE);
 			if(i == 3)
 			{
@@ -213,7 +214,7 @@ unsigned long prot)
 				make_pml3e((uint64_t) page, 0, 0, 0, 0, 0,
 					is_user, 1, 1);
 			}
-			pml = phys_to_virt(page);
+			pml = (PML *) phys_to_virt(page);
 		}
 	}
 	
@@ -242,4 +243,85 @@ void flush_tlb(void *addr, size_t nr_pages)
 		__native_tlb_invalidate_page((void *) i);
 		i += PAGE_SIZE;
 	} while(--nr_pages);
+}
+
+bool pml_is_empty(PML *pml)
+{
+	for(int i = 0; i < 512; i++)
+	{
+		if(pml->entries[i])
+			return false;
+	}
+	return true;
+}
+
+void __unmap_page(struct address_space *as, void *addr)
+{
+	struct address_space *aspace = (struct address_space *) as;
+ 
+	const unsigned int paging_levels = 4;
+	unsigned int indices[paging_levels];
+	unsigned long virt = (unsigned long) addr;
+
+	for(unsigned int i = 0; i < paging_levels; i++)
+	{
+		indices[i] = (virt >> 12) >> (i * 9) & 0x1ff;
+	}
+
+	PML *pml4 = (PML*) phys_to_virt(aspace->pml);
+
+	PML *pml3 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml4->entries[indices[3]]));
+	if(!pml3)
+		return;
+
+	PML *pml2 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml3->entries[indices[2]]));
+	if(!pml2)
+		return;
+
+	PML *pml1 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml2->entries[indices[1]]));
+	if(!pml1)
+		return;
+	
+	pml1->entries[indices[0]] = 0;
+
+	/* Now that we've freed the destination page, work our way upwards to
+	 * check if the paging structures are empty.
+	 * If so, free them as well.
+	*/
+
+	if(pml_is_empty(pml1))
+	{
+		uintptr_t raw_address = PML_EXTRACT_ADDRESS(pml2->entries[indices[1]]);
+		free_page(phys_to_page(raw_address));
+		pml2->entries[indices[1]] = 0;
+	}
+
+	if(pml_is_empty(pml2))
+	{
+		uintptr_t raw_address = PML_EXTRACT_ADDRESS(pml3->entries[indices[2]]);
+		free_page(phys_to_page(raw_address));
+		pml3->entries[indices[2]] = 0;
+	}
+
+	if(pml_is_empty(pml3))
+	{
+		uintptr_t raw_address = PML_EXTRACT_ADDRESS(pml4->entries[indices[3]]);
+		free_page(phys_to_page(raw_address));
+		pml4->entries[indices[3]] = 0;
+	}
+}
+
+void unmap_page_range(struct address_space *as, void *addr, size_t len)
+{
+	size_t nr_pgs = size_to_pages(len);
+	unsigned long a = (unsigned long) addr;
+
+	while(nr_pgs--)
+	{
+		/* TODO: Connect this up */
+		__unmap_page(&boot_address_space, (void *) a);
+		a += PAGE_SIZE;
+	}
+
+	flush_tlb(addr, size_to_pages(len));
 }

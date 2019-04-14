@@ -44,6 +44,7 @@ CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D ACPI_LIBRARY -D ACPI_DEBUG_OUTP
 LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS) -fwhole-program
 LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS) -lk -lgcc
 ACPICA_CFLAGS:=$(filter-out -fsanitize=undefined -fsanitize=address -Werror, $(CFLAGS))
+CXXFLAGS:=-fno-rtti -fno-exceptions -fcheck-new
 
 OBJS:=\
 $(patsubst %.c,%.o,$(wildcard kernel/*.c)) \
@@ -54,6 +55,14 @@ $(patsubst %.c,%.o,$(wildcard fs/*.c)) \
 $(patsubst %.c,%.o,$(wildcard fs/*/*.c)) \
 $(patsubst %.c,%.o,$(wildcard $(ARCHDIR)/*.c)) \
 $(patsubst %.c,%.o,$(wildcard $(ARCHDIR)/*/*.c)) \
+$(patsubst %.cpp,%.o,$(wildcard kernel/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard kernel/*/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard mm/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard mm/*/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard fs/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard fs/*/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard $(ARCHDIR)/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard $(ARCHDIR)/*/*.cpp)) \
 $(filter-out $(ARCHDIR)/crtn.o, $(filter-out $(ARCHDIR)/crti.o, \
 $(patsubst %.S,%.o,$(wildcard $(ARCHDIR)/*.S))))
 
@@ -100,6 +109,7 @@ acpica/%.o: acpica/%.c
 %.o: %.cpp
 	@echo [CXX] $<
 	@$(CXX) -c $< -o $@ -std=c++14 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS)
+
 $(ARCHDIR)/__vdso.o: $(ARCHDIR)/__vdso.c
 	@echo [CC] $<
 	@$(CC) -c $< -o $@ -shared -fpic

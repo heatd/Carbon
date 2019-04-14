@@ -38,7 +38,7 @@ void srand (unsigned);
 void *malloc (size_t);
 void *calloc (size_t, size_t);
 void *realloc (void *, size_t);
-#ifdef __is_onyx_kernel
+#ifdef __is_carbon_kernel
 void *zalloc(size_t);
 #endif
 void free (void *);

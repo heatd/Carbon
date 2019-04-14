@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include <stdbool.h>
 
 #include <carbon/x86/portio.h>
 #include <carbon/memory.h>
@@ -72,8 +71,8 @@ struct serial_port *com1 = NULL;
 
 ssize_t serial_console_write(const void *buffer, size_t len, struct console *c)
 {
-	struct serial_port *p = c->priv;
-	serial_write(buffer, len, p);
+	struct serial_port *p = (struct serial_port *) c->priv;
+	serial_write((const char *) buffer, len, p);
 
 	return len;
 }
@@ -98,7 +97,7 @@ void x86_serial_init(void)
 	outb(0x3f8 + 7, 0xAA);
 	if(inb(0x3f8 + 7) != 0xAA)
 		return;
-	com1 = ksbrk(sizeof(struct serial_port));
+	com1 = (struct serial_port *) ksbrk(sizeof(struct serial_port));
 	
 	com1->io_port = 0x3f8;
 	com1->com_nr = 0;

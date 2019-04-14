@@ -27,12 +27,13 @@ void *map_pages(void *addr, unsigned long prot, unsigned int nr_pages)
 	uintptr_t _a = (uintptr_t) addr;
 	while(nr_pages--)
 	{
-		void *p = __alloc_pages(0);
+		struct page *p = alloc_pages(1, 0);
 		if(!p)
 			return NULL;
-		if(!map_phys_to_virt(_a, (uintptr_t) p, prot))
+
+		if(!map_phys_to_virt(_a, (uintptr_t) p->paddr, prot))
 		{
-			__free_page(p);
+			free_page(p);
 			return NULL;
 		}
 		_a += PAGE_SIZE;

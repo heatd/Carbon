@@ -173,7 +173,7 @@ void (* const int_handlers[])(intctx_t *ctx) =
 	exception_panic
 };
 
-void x86_exception_gate(intctx_t *ctx)
+extern "C" void x86_exception_gate(intctx_t *ctx)
 {
 	int_handlers[ctx->int_no](ctx);
 }

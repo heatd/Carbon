@@ -37,40 +37,7 @@ void get_kernel_limits(struct kernel_limits *l)
 	l->end_phys = end_virt - kernel_base;
 }
 
-bool klimits_present = false;
-
-bool page_is_used(struct boot_info *info, void *p)
+bool platform_page_is_used(void *page)
 {
-	uintptr_t page = (uintptr_t) p;
-
-	/* First check if it's between the kernel's addresses */
-	static struct kernel_limits l;
-	
-	if(!klimits_present)
-	{
-		klimits_present = true;
-		get_kernel_limits(&l);
-		printf("Kernel limits: %lx-%lx phys, %lx-%lx virt\n", l.start_phys,
-		l.end_phys, l.start_virt, l.end_virt);
-	}
-
-	uintptr_t kernel_brk = (uintptr_t) ksbrk(0);
-
-	kernel_brk -= get_kernel_base_address();
-
-	if(page >= l.start_phys && page < kernel_brk)
-	{
-		/* Between the kernel and the data segment, is used */
-		return true;
-	}
-
-	/* Now check if the page is used by any modules */
-	for(struct module *m = info->modules; m != NULL; m = m->next)
-	{
-		uintptr_t module_end = m->start + m->size;
-		if(page >= m->start && page < module_end)
-			return true;
-	}
-
 	return false;
 }

@@ -21,7 +21,7 @@ struct heap
 	void *brk;
 };
 
-static struct heap heap = {0};
+static struct heap heap = {};
 uintptr_t starting_address = 0;
 
 void heap_set_start(uintptr_t heap_start)
@@ -67,7 +67,7 @@ void *do_brk_change(intptr_t inc)
 	return old_brk;
 }
 
-void *sbrk(intptr_t increment)
+extern "C" void *sbrk(intptr_t increment)
 {
 	return do_brk_change(increment);
 }

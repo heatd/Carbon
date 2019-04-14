@@ -11,13 +11,14 @@
 #include <carbon/vm.h>
 #include <carbon/memory.h>
 #include <carbon/panic.h>
+#include <carbon/vmobject.h>
 
 #include <libdict/dict.h>
 
 #define KADDR_SPACE_SIZE	0x800000000000
 #define KADDR_START		0xffff800000000000
 
-struct address_space kernel_address_space = {0};
+struct address_space kernel_address_space = {};
 
 int vm_cmp(const void* k1, const void* k2)
 {
@@ -30,7 +31,7 @@ int vm_cmp(const void* k1, const void* k2)
 struct vm_region *vm_reserve_region(struct address_space *as,
 				    unsigned long start, size_t size)
 {
-	struct vm_region *region = malloc(sizeof(*region));
+	struct vm_region *region = (struct vm_region *) malloc(sizeof(*region));
 	if(!region)
 		return NULL;
 
@@ -61,6 +62,7 @@ struct vm_region *vm_allocate_region(struct address_space *as,
 	rb_itor *it = rb_itor_new(as->area_tree);
 	bool node_valid;
 	unsigned long last_end = min;
+	struct vm_region *f = nullptr;
 
 	if(min != as->start)
 		node_valid = rb_itor_search_ge(it, (const void *) min);
@@ -76,7 +78,7 @@ struct vm_region *vm_allocate_region(struct address_space *as,
 	 * and the start of the address space
 	*/
 
-	struct vm_region *f = *rb_itor_datum(it);
+	f = (struct vm_region *) *rb_itor_datum(it);
 
 #if DEBUG_VM
 	printf("Tiniest node: %016lx\n", f->start);
@@ -91,14 +93,14 @@ struct vm_region *vm_allocate_region(struct address_space *as,
 	
 	while(node_valid)
 	{
-		struct vm_region *f = *rb_itor_datum(it);
+		struct vm_region *f = (struct vm_region *) *rb_itor_datum(it);
 		last_end = f->start + f->size;
  
 		node_valid = rb_itor_next(it);
 		if(!node_valid)
 			break;
 
-		struct vm_region *vm = *rb_itor_datum(it);
+		struct vm_region *vm = (struct vm_region *) *rb_itor_datum(it);
 
 		if(vm->start - last_end >= size && min <= vm->start)
 			break;
@@ -140,4 +142,108 @@ void vm_init(void)
 	}
 
 	malloc_reserve_memory_space();
+}
+
+void vm_destroy_region(struct address_space *as, struct vm_region *region)
+{
+	dict_remove_result res = rb_tree_remove(as->area_tree,
+						 (const void *) region->start);
+	assert(res.removed == true);
+	
+	/* Slowly destroy the vm region object now */
+
+	free(region);
+}
+
+void vm_assign_vmo(struct vm_region *region, VmObject *vmo)
+{
+	region->vmo = vmo;
+}
+
+int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
+{
+	size_t nr_pages = size_to_pages(len);
+	unsigned long start = region->start + off;
+
+	while(nr_pages--)
+	{
+		struct page *p = region->vmo->Get(off);
+
+		assert(p != nullptr);
+
+		if(!map_phys_to_virt(start + off, (unsigned long) p->paddr, region->perms))
+			return -1;
+
+		off += PAGE_SIZE;
+	}
+
+	return 0;
+}
+
+namespace Vm
+{
+
+struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long min, size_t size)
+{
+	return vm_allocate_region(as, min, size);
+}
+
+struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size, unsigned long flags)
+{
+	struct vm_region *reg = AllocateRegionInternal(as, min, size);
+
+	if(!reg)
+		return nullptr;
+
+	reg->perms = flags;
+
+	VmObjectPhys *phys = new VmObjectPhys(false, size_to_pages(size), reg, nullptr);
+
+	if(!phys)
+	{
+		vm_destroy_region(as, reg);
+		return nullptr;
+	}
+
+	vm_assign_vmo(reg, phys);
+
+	if(phys->Populate(0, size) < 0)
+	{
+		delete phys;
+		vm_destroy_region(as, reg);
+		return nullptr;
+	}
+
+	if(vm_update_mapping(reg, 0, size) < 0)
+	{
+		delete phys;
+		vm_destroy_region(as, reg);
+		return nullptr;
+	}
+
+	return reg;	
+}
+
+void *mmap(struct address_space *as, unsigned long min, size_t size, unsigned long flags)
+{
+	struct vm_region *region = MmapInternal(as, min, size, flags);
+	if(!region)	return nullptr;
+	return (void *) region->start;
+}
+
+/* TODO: Use actual munmap semantics and do stuff like splitting regions */
+void munmap(struct address_space *as, void *addr)
+{
+	struct vm_region *vmr = (struct vm_region *) *rb_tree_search(as->area_tree, addr);
+
+	if(vmr->vmo)
+	{
+		delete vmr->vmo;
+	}
+
+	unmap_page_range(as, addr, vmr->size);
+
+	vm_destroy_region(as, vmr);
+}
+
 }

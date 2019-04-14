@@ -51,7 +51,8 @@ void console_add(struct console *c)
 	spin_unlock(&list_lock);
 }
 
-ssize_t console_write(void *buffer, size_t len)
+/* Needs to be extern "C" in order to be called by printf (which is written in C) */
+extern "C" ssize_t console_write(void *buffer, size_t len)
 {
 	spin_lock(&list_lock);
 

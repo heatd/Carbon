@@ -50,8 +50,8 @@ static inline uint32_t unpack_rgba(struct color color, struct framebuffer *fb)
 	return c;
 }
 
-static struct color default_fg = {.r = 0xaa, .g = 0xaa, .b = 0xaa};
-static struct color default_bg = {0};
+static struct color default_fg = {.r = 0xaa, .g = 0xaa, .b = 0xaa, .a = 0x00};
+static struct color default_bg = {};
 
 static void draw_char(uint32_t c, unsigned int x, unsigned int y,
 	struct framebuffer *fb, struct color fg, struct color bg)
@@ -92,7 +92,7 @@ static void draw_char(uint32_t c, unsigned int x, unsigned int y,
 			}
 		}
 
-		buffer = (void*) (((char *) buffer) + fb->pitch);
+		buffer = (volatile char*) (((char *) buffer) + fb->pitch);
 	}
 }
 
@@ -204,7 +204,7 @@ void draw_cursor(int x, int y, struct framebuffer *fb)
 			}
 		}
 
-		buffer = (void*) (((char *) buffer) + fb->pitch);
+		buffer = (volatile char *) (((char *) buffer) + fb->pitch);
 	}
 }
 
@@ -221,14 +221,14 @@ void vterm_flush(struct vterm *vterm);
 ssize_t vterm_write(const void *buffer, size_t len, struct console *c)
 {
 	ssize_t written = 0;
-	const char *str = buffer;
+	const char *str = (const char *) buffer;
 	for(size_t i = 0; i != len; str++, written++, len--)
 	{
-		vterm_putc(*str, c->priv);
+		vterm_putc(*str, (struct vterm *) c->priv);
 	}
 	
-	vterm_flush(c->priv);
-	update_cursor(c->priv);
+	vterm_flush((struct vterm *) c->priv);
+	update_cursor((struct vterm *) c->priv);
 	return written;
 }
 
@@ -269,12 +269,14 @@ void vterm_fill_screen(struct vterm *vterm, uint32_t character,
 	vterm_flush(vterm);
 }
 
-struct vterm primary_vterm = {0};
+struct vterm primary_vterm = {};
 struct console primary_console =
 {
-	.name = "vterm",
-	.write = vterm_write,
-	.priv = &primary_vterm
+	(char *) "vterm",
+	vterm_write,
+	nullptr,
+	&primary_vterm,
+	nullptr
 };
 
 static void fb_fill_color(uint32_t color, struct framebuffer *frameb)
@@ -297,8 +299,9 @@ void vterm_initialize(void)
 	primary_vterm.columns = fb->width / font->width;
 	primary_vterm.rows = fb->height / font->height;
 	primary_vterm.fb = fb;
-	primary_vterm.cells = efi_allocate_early_boot_mem(primary_vterm.columns * primary_vterm.rows
-		* sizeof(*primary_vterm.cells));
+	primary_vterm.cells = (struct console_cell *)
+		efi_allocate_early_boot_mem(
+		primary_vterm.columns * primary_vterm.rows * sizeof(*primary_vterm.cells));
 
 	primary_vterm.fg = default_fg;
 	primary_vterm.bg = default_bg;
