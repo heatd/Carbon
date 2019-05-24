@@ -54,7 +54,7 @@ struct page_arena
 	void *end_arena;
 	struct page_list *page_list;
 	struct page_list *tail;
-	struct spinlock lock;
+	Spinlock lock;
 	struct page_arena *next;
 };
 
@@ -74,10 +74,10 @@ struct page *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct 
 	struct page_list *base_pg = NULL;
 	bool found_base = false;
 
-	spin_lock(&arena->lock);
+	ScopedSpinlock lock(&arena->lock);
+
 	if(arena->free_pages < nr_pages)
 	{
-		spin_unlock(&arena->lock);
 		return NULL;
 	}
 
@@ -104,7 +104,6 @@ struct page *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct 
 	/* If we haven't found nr_pages contiguous pages, continue the search */
 	if(found_pages != nr_pages)
 	{
-		spin_unlock(&arena->lock);
 		return NULL;
 	}
 	else
@@ -126,7 +125,7 @@ struct page *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct 
 		if(tail)
 			tail->prev = head;
 
-		spin_unlock(&arena->lock);
+		lock.Unlock();
 
 		struct page *plist = NULL;
 		struct page_list *pl = base_pg;
@@ -189,7 +188,7 @@ static void append_page(struct page_arena *arena, struct page_list *page)
 
 void page_free_pages(struct page_arena *arena, void *addr, size_t nr_pages)
 {
-	spin_lock(&arena->lock);
+	ScopedSpinlock lock(&arena->lock);
 
 	if(!arena->page_list)
 	{
@@ -231,8 +230,6 @@ void page_free_pages(struct page_arena *arena, void *addr, size_t nr_pages)
 			list = l;
 		}
 	}
-
-	spin_unlock(&arena->lock);
 }
 
 void page_free(size_t nr_pages, void *addr)
@@ -457,3 +454,14 @@ struct page *alloc_pages(size_t nr_pgs, unsigned long flags)
 	else
 		return __get_phys_pages(nr_pgs, flags);
 }
+
+namespace Page
+{
+
+void GetStats(struct page_usage *usage)
+{
+	usage->total_pages = nr_global_pages;
+	usage->used_pages = used_pages;
+}
+
+};

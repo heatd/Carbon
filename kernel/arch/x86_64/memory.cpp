@@ -11,6 +11,7 @@
 
 #include <carbon/memory.h>
 #include <carbon/page.h>
+#include <carbon/vm.h>
 
 #define PML_EXTRACT_ADDRESS(n) (n & 0x0FFFFFFFFFFFF000)
 
@@ -113,13 +114,13 @@ static inline uint64_t make_pml1e(uint64_t base,
   		p);
 }
 
-struct address_space
+struct x86_address_space
 {
 	PML *pml;
 };
 
 PML *boot_pml4;
-struct address_space boot_address_space;
+struct x86_address_space boot_x86_address_space;
 
 static PML pdptphysical_map __attribute__((aligned(4096)));
 static PML pdphysical_map[512] __attribute__((aligned(4096)));
@@ -135,7 +136,7 @@ void x86_setup_physical_mappings(void)
 	/* Get the current PML4 and store it */
 	__asm__ __volatile__("movq %%cr3, %%rax\t\nmovq %%rax, %0":"=r"(boot_pml4));
 
-	boot_address_space.pml = boot_pml4;
+	boot_x86_address_space.pml = boot_pml4;
 	uintptr_t virt = PHYS_BASE;
 	assert(((virt >> 12) >> 18 & 0x1ff) == 0);
 
@@ -170,15 +171,15 @@ void x86_setup_physical_mappings(void)
 void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 unsigned long prot)
 {
-	struct address_space *aspace = (struct address_space *) addr;
+	struct x86_address_space *aspace = (struct x86_address_space *) addr;
  
 	const unsigned int paging_levels = 4;
 	unsigned int indices[paging_levels];
 
-	bool is_write = prot & PAGE_PROT_WRITE;
-	bool is_user = prot & PAGE_PROT_USER;
-	bool is_global = prot & PAGE_PROT_GLOBAL;
-	bool is_nx = !(prot & PAGE_PROT_EXECUTE);
+	bool is_write = prot & VM_PROT_WRITE;
+	bool is_user = prot & VM_PROT_USER;
+	bool is_global = is_user;
+	bool is_nx = !(prot & VM_PROT_EXEC);
 
 	for(unsigned int i = 0; i < paging_levels; i++)
 	{
@@ -223,14 +224,14 @@ unsigned long prot)
 	return (void*) virt;
 }
 
-HANDLE get_address_space_handle(void)
+HANDLE get_x86_address_space_handle(void)
 {
-	return &boot_address_space;
+	return &boot_x86_address_space;
 }
 
 void *map_phys_to_virt(uintptr_t virt, uintptr_t phys, unsigned long prot)
 {
-	HANDLE addr = get_address_space_handle();
+	HANDLE addr = get_x86_address_space_handle();
 	return __map_phys_to_virt(addr, virt, phys, prot);
 }
 
@@ -255,9 +256,9 @@ bool pml_is_empty(PML *pml)
 	return true;
 }
 
-void __unmap_page(struct address_space *as, void *addr)
+void __unmap_page(struct x86_address_space *as, void *addr)
 {
-	struct address_space *aspace = (struct address_space *) as;
+	struct x86_address_space *aspace = (struct x86_address_space *) as;
  
 	const unsigned int paging_levels = 4;
 	unsigned int indices[paging_levels];
@@ -268,17 +269,34 @@ void __unmap_page(struct address_space *as, void *addr)
 		indices[i] = (virt >> 12) >> (i * 9) & 0x1ff;
 	}
 
+	unsigned long entry = 0;
+
 	PML *pml4 = (PML*) phys_to_virt(aspace->pml);
 
-	PML *pml3 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml4->entries[indices[3]]));
-	if(!pml3)
+	entry = pml4->entries[indices[3]];
+
+	if(!entry & 1)
 		return;
 
-	PML *pml2 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml3->entries[indices[2]]));
+	PML *pml3 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));
+	if(!pml3)
+		return;
+	
+	entry = pml3->entries[indices[2]];
+
+	if(!entry & 1)
+		return;
+
+	PML *pml2 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));
 	if(!pml2)
 		return;
 
-	PML *pml1 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(pml2->entries[indices[1]]));
+	entry = pml2->entries[indices[1]];
+
+	if(!entry & 1)
+		return;
+
+	PML *pml1 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));
 	if(!pml1)
 		return;
 	
@@ -311,7 +329,7 @@ void __unmap_page(struct address_space *as, void *addr)
 	}
 }
 
-void unmap_page_range(struct address_space *as, void *addr, size_t len)
+void unmap_page_range(void *as, void *addr, size_t len)
 {
 	size_t nr_pgs = size_to_pages(len);
 	unsigned long a = (unsigned long) addr;
@@ -319,7 +337,7 @@ void unmap_page_range(struct address_space *as, void *addr, size_t len)
 	while(nr_pgs--)
 	{
 		/* TODO: Connect this up */
-		__unmap_page(&boot_address_space, (void *) a);
+		__unmap_page(&boot_x86_address_space, (void *) a);
 		a += PAGE_SIZE;
 	}
 

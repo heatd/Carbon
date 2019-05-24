@@ -23,7 +23,7 @@ export INCLUDEDIR:=$(PREFIX)/include
 export BINDIR:=$(PREFIX)/bin
 export MANDIR:=/usr/share/man
 export PKGDIR:=/pkg
-export CFLAGS?=-Os -g
+export CFLAGS?=-Og -g
 export CPPFLAGS:=
 
 # Configure the cross-compiler to use the desired system root.
@@ -78,4 +78,4 @@ qemu: iso
 	-monitor stdio -boot d -netdev user,id=u1 -device e1000,netdev=u1 \
 	-object filter-dump,id=f1,netdev=u1,file=net.pcap \
 	--enable-kvm -smp 2 -cpu host,migratable=no -d int -vga std \
-	-bios OVMF.fd -no-reboot -no-shutdown -usb
+	-bios OVMF.fd -usb

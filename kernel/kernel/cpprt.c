@@ -21,6 +21,12 @@ void __cxa_pure_virtual(void)
 	/* Just panic */
 	panic("__cxa_pure_virtual: Virtual function not found!");
 }
+
+void __cxa_finalize(void)
+{
+	panic("__cxa_finalize: we should never get here!");
+}
+
 /* guard variables */
  
 /* The ABI requires a 64-bit type.  */

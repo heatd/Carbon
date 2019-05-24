@@ -5,6 +5,9 @@
 
 static char print_buffer[200000] = {0};
 
+/* Define errno somewhere */
+int errno;
+
 int printf(const char *fmt, ...)
 {
 	va_list list;

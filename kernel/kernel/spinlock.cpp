@@ -9,11 +9,32 @@ void spin_lock(struct spinlock *lock)
 {
 	while(__sync_lock_test_and_set(&lock->lock, 1))
 	{
-		__asm__ __volatile__("pause");
+		while(lock->lock == 1)
+			__asm__ __volatile__("pause");
 	}
 }
 
 void spin_unlock(struct spinlock *lock)
 {
 	__sync_lock_release(&lock->lock);
+}
+
+Spinlock::~Spinlock()
+{
+	assert(lock.lock != 1);
+}
+
+void Spinlock::Lock()
+{
+	spin_lock(&lock);
+}
+
+void Spinlock::Unlock()
+{
+	spin_unlock(&lock);
+}
+
+bool Spinlock::IsLocked()
+{
+	return lock.lock;
 }

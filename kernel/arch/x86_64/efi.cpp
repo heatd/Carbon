@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <limits.h>
 
+#include <carbon/page.h>
 #include <carbon/memory.h>
 #include <carbon/bootprotocol.h>
 #include <carbon/x86/serial.h>
@@ -245,6 +246,21 @@ extern "C" void efi_entry(struct boot_info *info)
 	heap_set_start(heap_start);
 
 	vm_init();
+
+	struct Page::page_usage usage;
+	Page::GetStats(&usage);
+
+	printf("Used pages: %lu (%lu KiB)\n", usage.used_pages, usage.used_pages * PAGE_SIZE / 1024);
+
+	size_t size = 0x400000;
+	void *ptr = Vm::mmap(&kernel_address_space, 0, size, VM_PROT_USER | VM_PROT_WRITE);
+	memset(ptr, 0xff, size);
+
+	Vm::munmap(&kernel_address_space, (void *)((unsigned long) ptr + 0x1000), size);
+
+	Page::GetStats(&usage);
+
+	printf("Used pages: %lu (%lu KiB)\n", usage.used_pages, usage.used_pages * PAGE_SIZE / 1024);
 
 	while(1)
 		__asm__ __volatile__("hlt");

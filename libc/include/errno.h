@@ -9,7 +9,7 @@ extern "C" {
 
 #include <bits/errno.h>
 
-int errno;
+extern int errno;
 
 #ifdef _GNU_SOURCE
 extern char *program_invocation_short_name, *program_invocation_name;

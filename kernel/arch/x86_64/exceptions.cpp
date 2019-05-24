@@ -12,6 +12,7 @@
 
 #include <carbon/x86/exceptions.h>
 #include <carbon/panic.h>
+#include <carbon/vm.h>
 
 void div0_exception(intctx_t *ctx)
 {
@@ -45,6 +46,7 @@ void boundrange_exception(intctx_t *ctx)
 
 void invalid_opcode_exception(intctx_t *ctx)
 {
+	printf("invalid opcode at %lx\n", ctx->rip);
 	panic("Invalid opcode exception");
 }
 
@@ -80,30 +82,38 @@ void stack_segment_fault(intctx_t *ctx)
 
 void general_protection_fault(intctx_t *ctx)
 {
+	printf("GPF at %lx\n", ctx->rip);
 	panic("General protection fault");
+}
+
+unsigned long get_cr2(void)
+{
+	unsigned long r;
+	__asm__ __volatile__("mov %%cr2, %0" : "=r"(r));
+
+	return r;
 }
 
 void page_fault_handler(intctx_t *ctx)
 {
-	uint64_t error_code = ctx->err_code;
+	auto error_code = ctx->err_code;
 	bool write = error_code & 0x2;
 	bool read = write ? 0 : 1;
 	bool exec = error_code & 0x10;
 	bool user = error_code & 0x4;
 
-	printf("Page fault info: ");
+	auto fault_address = get_cr2();
 
-	if(write)
-		printf("W ");
-	if(read)
-		printf("R ");
-	if(exec)
-		printf("X ");
-	if(user)
-		printf("U ");
-	printf(" \n");
+	Vm::VmFault fault(user, write, exec, fault_address, ctx->rip);
+	auto status = fault.Handle();
 
-	printf("Page fault occurred at %lx\n", ctx->rip);
+	if(status != Vm::VmFaultStatus::VM_OK)
+	{
+		fault.Dump();
+	}
+	else
+		return;
+
 	panic("Page fault");
 }
 

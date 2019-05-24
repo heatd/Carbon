@@ -10,10 +10,11 @@
 #include <carbon/page.h>
 #include <carbon/vm.h>
 #include <carbon/memory.h>
+#include <carbon/panic.h>
 
 int VmObject::AddPage(size_t offset, struct page *page)
 {
-	spin_lock(&lock);
+	lock.Lock();
 
 	page->off = offset;
 
@@ -23,14 +24,14 @@ int VmObject::AddPage(size_t offset, struct page *page)
 
 	*pp = page;
 
-	spin_unlock(&lock);
+	lock.Unlock();
 
 	return 0;
 }
 
 struct page *VmObject::RemovePage(size_t page_off)
 {
-	spin_lock(&lock);
+	lock.Lock();
 
 	struct page *ret = nullptr;
 
@@ -55,7 +56,7 @@ struct page *VmObject::RemovePage(size_t page_off)
 		}
 	}
 
-	spin_unlock(&lock);
+	lock.Unlock();
 
 	return ret;
 }
@@ -64,7 +65,6 @@ int VmObject::Populate(size_t starting_off, size_t region_size)
 {
 	size_t nr_pages = size_to_pages(region_size);
 
-	printf("populating %u pages\n", nr_pages);
 	while(nr_pages--)
 	{
 		int st = Commit(starting_off);
@@ -80,23 +80,20 @@ int VmObject::Populate(size_t starting_off, size_t region_size)
 
 struct page *VmObject::Get(size_t offset)
 {
-	spin_lock(&lock);
-
+	lock.Lock();
 	struct page *p = page_list;
 
 	while(p)
 	{
 		if(p->off == offset)
 		{
-			spin_unlock(&lock);
 			return p;
 		}
 
 		p = p->next_un.next_virtual_region;
 	}
 
-	spin_unlock(&lock);
-
+	lock.Unlock();
 	return nullptr;
 }
 
@@ -110,4 +107,148 @@ int VmObjectPhys::Commit(size_t offset)
 	AddPage(offset, p);
 
 	return 0;
+}
+
+inline bool is_included(size_t lower, size_t upper, size_t x)
+{
+	if(x >= lower && x < upper)
+		return true;
+	return false;
+}
+
+inline bool is_excluded(size_t lower, size_t upper, size_t x)
+{
+	if(x < lower || x > upper)
+		return true;
+	return false;
+}
+
+
+#define PURGE_SHOULD_FREE	(1 << 0)
+#define	PURGE_EXCLUDE		(1 << 1)
+
+
+void VmObject::PurgePages(size_t lower_bound, size_t upper_bound, unsigned int flags, VmObject *second)
+{
+	ScopedSpinlock l(&lock);
+
+	struct page *before = nullptr;
+	struct page *p = page_list;
+
+	bool should_free = flags & PURGE_SHOULD_FREE;
+	bool exclusive = flags & PURGE_EXCLUDE;
+
+	assert(!(should_free && second != nullptr));
+
+	bool (*compare_function)(size_t, size_t, size_t) = is_included;
+
+	if(exclusive)
+		compare_function = is_excluded;
+
+	while(p != nullptr)
+	{
+		if(compare_function(lower_bound, upper_bound, p->off))
+		{
+			if(!before)
+			{
+				page_list = p->next_un.next_virtual_region;
+			}
+			else
+			{
+				before->next_un.next_virtual_region = p->next_un.next_virtual_region;
+			}
+
+			struct page *old_p = p;
+			p = p->next_un.next_virtual_region;
+
+			old_p->next_un.next_virtual_region = nullptr;
+
+			/* TODO: Add a virtual function to do this */
+			if(should_free)
+			{
+				free_page(old_p);
+			}
+
+			if(second)
+				second->AddPage(old_p->off, old_p);
+		}
+		else
+		{
+			before = p;
+			p = p->next_un.next_virtual_region;
+		}
+	}
+}
+
+int VmObject::Resize(size_t new_size)
+{
+	nr_pages = new_size >> PAGE_SHIFT;
+	PurgePages(0, new_size, PURGE_SHOULD_FREE | PURGE_EXCLUDE);
+
+	return 0;
+}
+
+void VmObject::UpdateOffsets(size_t off)
+{
+	ScopedSpinlock l(&lock);
+
+	for(struct page *p = page_list; p != nullptr; p = p->next_un.next_virtual_region)
+	{
+		p->off -= off;
+	}
+}
+
+VmObject *VmObject::Split(size_t split_point, size_t hole_size)
+{
+	size_t split_point_pgs = split_point >> PAGE_SHIFT;
+	size_t hole_size_pgs = hole_size >> PAGE_SHIFT;
+
+	VmObject *second_vmo = CreateCopy();
+
+	if(!second_vmo)
+		return nullptr;
+
+	second_vmo->nr_pages -= split_point_pgs + hole_size_pgs;
+	second_vmo->page_list = nullptr;
+
+	auto max = hole_size + split_point;
+
+	PurgePages(split_point, max, PURGE_SHOULD_FREE);
+	PurgePages(max, nr_pages << PAGE_SHIFT, 0, second_vmo);
+	second_vmo->UpdateOffsets(split_point + hole_size);
+
+	nr_pages -= hole_size_pgs + second_vmo->nr_pages;
+
+	return second_vmo;
+}
+
+void VmObject::SanityCheck()
+{
+	ScopedSpinlock l(&lock);
+
+	for(struct page *p = page_list; p != NULL; p = p->next_un.next_virtual_region)
+	{
+		if(p->off > (nr_pages) << PAGE_SHIFT)
+		{
+			printf("Bad vmobject: p->off > nr_pages << PAGE_SHIFT.\n");
+			printf("struct page: %p\n", p);
+			printf("Offset: %lx\n", p->off);
+			printf("Size: %lx\n", nr_pages << PAGE_SHIFT);
+			panic("bad vmobject");
+		}
+
+		if(p->ref == 0)
+		{
+			printf("Bad vmobject:: p->ref == 0.\n");
+			printf("struct page: %p\n", p);
+			panic("bad vmobject");
+		}
+	}	
+}
+
+void VmObject::TruncateBeginningAndResize(size_t off)
+{
+	PurgePages(0, off, PURGE_SHOULD_FREE);
+	UpdateOffsets(off);
+	nr_pages -= (off >> PAGE_SHIFT);
 }
