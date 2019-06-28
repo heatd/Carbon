@@ -472,6 +472,7 @@ void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
 
 	if(!region)
 	{
+		delete vmo;
 		return nullptr;
 	}
 	else
