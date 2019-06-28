@@ -397,7 +397,6 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 				if(vm_add_region(as, region) < 0)
 					return -ENOMEM;
 				region->vmo->TruncateBeginningAndResize(to_shave_off);
-				region->vmo->SanityCheck();
 			}
 			else
 			{

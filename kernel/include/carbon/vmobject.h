@@ -12,6 +12,7 @@
 #include <carbon/vm.h>
 #include <carbon/lock.h>
 #include <carbon/page.h>
+#include <carbon/list.h>
 
 struct page;
 
@@ -22,7 +23,7 @@ protected:
 	/* TODO: Create a list of owners when we're able to share VMOs */
 	struct vm_region *owner;
 	size_t nr_pages;
-	struct page *page_list;
+	LinkedList<struct page *> page_list;
 	bool should_demand_page;
 
 	int AddPage(size_t page_off, struct page *page);
@@ -32,14 +33,44 @@ protected:
 public:
 	Spinlock lock;
 	static constexpr bool is_refcountable = true;
+	
+	static inline bool PageToList(LinkedList<struct page *> *list, struct page *pages)
+	{
+		for(struct page *p = pages; p != nullptr; p = p->next_un.next_allocation)
+		{
+			if(!list->Add(p))
+			{
+				/* Undo stuff if something fails */
+				for(struct page *page = pages; page != p; page = page->next_un.next_allocation)
+					list->Remove(page);
+				
+				return false;
+			}
+		}
+
+		return true;
+	}
+	
 	int Populate(size_t starting_off, size_t region_size);
 
 	VmObject(bool should_demand_page,
 		 size_t nr_pages,
 		 struct vm_region *owner,
 		 struct page *init_pages)
-		 : owner(owner), nr_pages(nr_pages), page_list(init_pages), lock()
-	{};
+		 : owner(owner), nr_pages(nr_pages), page_list(), lock()
+	{
+		assert(PageToList(&page_list, init_pages) != false);
+	};
+
+	VmObject(bool should_demand_page,
+		 size_t nr_pages,
+		 struct vm_region *owner,
+		 LinkedList<struct page *> init_pages)
+		 : owner(owner), nr_pages(nr_pages), page_list(), lock()
+	{
+		assert(page_list.Copy(&init_pages) != false);
+	};
+
 
 	inline void SetOwner(struct vm_region *_owner)
 	{
@@ -52,7 +83,7 @@ public:
 	struct page *Get(size_t offset);
 	int Resize(size_t new_size);
 	VmObject *Split(size_t split_point, size_t hole_size);
-	virtual VmObject *CreateCopy() = 0;
+	virtual VmObject *CreateHollowCopy() = 0;
 	void SanityCheck();
 	void TruncateBeginningAndResize(size_t off);
 };
@@ -68,15 +99,24 @@ public:
 	{
 		lock.Lock();
 
-		free_pages(page_list);
+		for(auto it = page_list.begin(); it != page_list.end();)
+		{
+			auto t = it;
+			it++;
+	
+			struct page *page = *t;
+			page_list.Remove(page);
+			free_page(page);
+
+		}
 
 		lock.Unlock();
 	}
 
 	int Commit(size_t offset);
-	VmObject *CreateCopy()
+	VmObject *CreateHollowCopy()
 	{
-		VmObjectPhys *p = new VmObjectPhys(should_demand_page, nr_pages, owner, page_list);
+		VmObjectPhys *p = new VmObjectPhys(should_demand_page, nr_pages, owner, (struct page *) nullptr);
 		return p;
 	}
 };
@@ -89,9 +129,9 @@ public:
 	~VmObjectMmio(){}
 	bool Init(unsigned long phys);
 	int Commit(size_t offset);
-	VmObject *CreateCopy()
+	VmObject *CreateHollowCopy()
 	{
-		VmObjectMmio *mmio = new VmObjectMmio(should_demand_page, nr_pages, owner, page_list);
+		VmObjectMmio *mmio = new VmObjectMmio(should_demand_page, nr_pages, owner, (struct page *) nullptr);
 		return mmio;
 	}
 	

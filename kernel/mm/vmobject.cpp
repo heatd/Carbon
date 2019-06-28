@@ -15,51 +15,39 @@
 
 int VmObject::AddPage(size_t offset, struct page *page)
 {
-	lock.Lock();
+	ScopedSpinlock l(&lock);
 
 	page->off = offset;
 
-	struct page **pp = &page_list;
-	while(*pp)
-		pp = &(*pp)->next_un.next_virtual_region;
-
-	*pp = page;
-
-	lock.Unlock();
+	if(!page_list.Add(page))
+		return -1;
+	
 
 	return 0;
 }
 
 struct page *VmObject::RemovePage(size_t page_off)
 {
-	lock.Lock();
+	ScopedSpinlock l(&lock);
 
-	struct page *ret = nullptr;
-
-	if(page_list != nullptr)
+	struct page *target = nullptr;
+	LinkedListIterator<struct page *> starting_it;
+	for(auto it = page_list.begin(); it != page_list.end(); it++)
 	{
-		if(page_list->off == page_off)
+		auto page = *it;
+		if(page->off == page_off)
 		{
-			ret = page_list;
-			page_list = page_list->next_un.next_virtual_region;
-		}
-	}
-	else
-	{
-		for(struct page *p = page_list; p->next_un.next_virtual_region;
-		    p = p->next_un.next_virtual_region)
-		{
-			if(p->next_un.next_virtual_region->off == page_off)
-			{
-				ret = p->next_un.next_virtual_region;
-				p->next_un.next_virtual_region = ret->next_un.next_virtual_region;
-			}
+			target = page;
+			starting_it = it;
+			break;
 		}
 	}
 
-	lock.Unlock();
+	assert(target != nullptr);
 
-	return ret;
+	assert(page_list.Remove(target, starting_it) == true);
+
+	return target;
 }
 
 int VmObject::Populate(size_t starting_off, size_t region_size)
@@ -81,20 +69,14 @@ int VmObject::Populate(size_t starting_off, size_t region_size)
 
 struct page *VmObject::Get(size_t offset)
 {
-	lock.Lock();
-	struct page *p = page_list;
+	ScopedSpinlock l(&lock);
 
-	while(p)
+	for(auto page : page_list)
 	{
-		if(p->off == offset)
-		{
-			return p;
-		}
-
-		p = p->next_un.next_virtual_region;
+		if(page->off == offset)
+			return page;
 	}
 
-	lock.Unlock();
 	return nullptr;
 }
 
@@ -133,8 +115,7 @@ void VmObject::PurgePages(size_t lower_bound, size_t upper_bound, unsigned int f
 {
 	ScopedSpinlock l(&lock);
 
-	struct page *before = nullptr;
-	struct page *p = page_list;
+	auto node = page_list.GetHead();
 
 	bool should_free = flags & PURGE_SHOULD_FREE;
 	bool exclusive = flags & PURGE_EXCLUDE;
@@ -146,37 +127,32 @@ void VmObject::PurgePages(size_t lower_bound, size_t upper_bound, unsigned int f
 	if(exclusive)
 		compare_function = is_excluded;
 
-	while(p != nullptr)
+	while(node != nullptr)
 	{
+		auto p = node->data;
+
 		if(compare_function(lower_bound, upper_bound, p->off))
 		{
-			if(!before)
-			{
-				page_list = p->next_un.next_virtual_region;
-			}
-			else
-			{
-				before->next_un.next_virtual_region = p->next_un.next_virtual_region;
-			}
+			LinkedListIterator<struct page *> it(node);
+			
+			node = node->next;
 
-			struct page *old_p = p;
-			p = p->next_un.next_virtual_region;
+			assert(page_list.Remove(p, it) != false);
 
-			old_p->next_un.next_virtual_region = nullptr;
+			p->next_un.next_virtual_region = nullptr;
 
 			/* TODO: Add a virtual function to do this */
 			if(should_free)
 			{
-				free_page(old_p);
+				free_page(p);
 			}
 
 			if(second)
-				second->AddPage(old_p->off, old_p);
+				second->AddPage(p->off, p);
 		}
 		else
 		{
-			before = p;
-			p = p->next_un.next_virtual_region;
+			node = node->next;
 		}
 	}
 }
@@ -184,7 +160,9 @@ void VmObject::PurgePages(size_t lower_bound, size_t upper_bound, unsigned int f
 int VmObject::Resize(size_t new_size)
 {
 	nr_pages = new_size >> PAGE_SHIFT;
-	PurgePages(0, new_size, PURGE_SHOULD_FREE | PURGE_EXCLUDE);
+	/* Subtract PAGE_SIZE from new_size because is_excluded does x > upper
+	 * (TL;DR so we don't leak a page) */
+	PurgePages(0, new_size - PAGE_SIZE, PURGE_SHOULD_FREE | PURGE_EXCLUDE);
 
 	return 0;
 }
@@ -193,9 +171,9 @@ void VmObject::UpdateOffsets(size_t off)
 {
 	ScopedSpinlock l(&lock);
 
-	for(struct page *p = page_list; p != nullptr; p = p->next_un.next_virtual_region)
+	for(auto page : page_list)
 	{
-		p->off -= off;
+		page->off -= off;
 	}
 }
 
@@ -204,13 +182,12 @@ VmObject *VmObject::Split(size_t split_point, size_t hole_size)
 	size_t split_point_pgs = split_point >> PAGE_SHIFT;
 	size_t hole_size_pgs = hole_size >> PAGE_SHIFT;
 
-	VmObject *second_vmo = CreateCopy();
+	VmObject *second_vmo = CreateHollowCopy();
 
 	if(!second_vmo)
 		return nullptr;
 
-	second_vmo->nr_pages -= split_point_pgs + hole_size_pgs;
-	second_vmo->page_list = nullptr;
+	second_vmo->nr_pages -= split_point_pgs + hole_size_pgs;;
 
 	auto max = hole_size + split_point;
 
@@ -227,7 +204,7 @@ void VmObject::SanityCheck()
 {
 	ScopedSpinlock l(&lock);
 
-	for(struct page *p = page_list; p != NULL; p = p->next_un.next_virtual_region)
+	for(auto p : page_list)
 	{
 		if(p->off > (nr_pages) << PAGE_SHIFT)
 		{
@@ -244,6 +221,8 @@ void VmObject::SanityCheck()
 			printf("struct page: %p\n", p);
 			panic("bad vmobject");
 		}
+
+		printf("Page: %p\n", p->paddr);
 	}	
 }
 
@@ -274,7 +253,7 @@ bool VmObjectMmio::Init(unsigned long phys)
 		phys += PAGE_SIZE;
 	}
 
-	page_list = pages;
+	assert(PageToList(&page_list, pages) != false);
 
 	return true;
 }

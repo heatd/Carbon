@@ -16,12 +16,12 @@ class LinkedListIterator;
 template <typename T>
 class LinkedListNode
 {
-private:
+public:
 	T data;
 	LinkedListNode<T> *prev, *next;
 	friend class LinkedList<T>;
 	friend class LinkedListIterator<T>;
-public:
+
 	LinkedListNode(T data) : data(data), prev(nullptr), next(nullptr)
 	{
 	}
@@ -45,6 +45,9 @@ private:
 	LinkedListNode<T> *current_node;
 	friend class LinkedList<T>;
 public:
+	LinkedListIterator() : current_node(nullptr)
+	{}
+
 	LinkedListIterator(LinkedListNode<T> *node)
 	{
 		current_node = node;
@@ -56,7 +59,7 @@ public:
 		return *this;
 	}
 
-	LinkedListIterator<T>& operator++(int)
+	LinkedListIterator<T> operator++(int)
 	{
 		LinkedListIterator<T> copy(*this);
 		++(*this);
@@ -87,6 +90,17 @@ private:
 	Spinlock lock;
 public:
 	LinkedList<T>() : head(nullptr), tail(nullptr){}
+	
+	/* Low-level-ish interface to the linked list */
+	LinkedListNode<T> *GetHead() const
+	{
+		return head;
+	}
+
+	LinkedListNode<T> *GetTail() const
+	{
+		return tail;
+	}
 
 	bool Add(T data)
 	{
@@ -158,6 +172,23 @@ public:
 	inline bool IsEmpty()
 	{
 		return (head == nullptr);
+	}
+
+	bool Copy(LinkedList<T> *list)
+	{
+		for(auto it = list->begin(); it != list->end(); it++)
+		{
+			if(!this->Add(*it))
+			{
+				/* Undo */
+				for(auto n = list->begin(); n != it; n++)
+					this->Remove(*n);
+				
+				return false;
+			}
+		}
+
+		return true;
 	}
 };
 
