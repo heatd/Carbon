@@ -21,6 +21,7 @@ void div0_exception(intctx_t *ctx)
 
 void debug_trap(intctx_t *ctx)
 {
+	printf("Int ctx: %p\n", ctx);
 	panic("Debug trap!");
 }
 

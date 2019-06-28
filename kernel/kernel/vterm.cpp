@@ -39,6 +39,7 @@ struct vterm
 	struct console_cell *cells;
 	struct color fg;
 	struct color bg;
+	bool has_scrolled;
 };
 
 static inline uint32_t unpack_rgba(struct color color, struct framebuffer *fb)
@@ -58,6 +59,13 @@ static void draw_char(uint32_t c, unsigned int x, unsigned int y,
 {
 	struct font *font = get_font_data();
 	volatile char *buffer = (volatile char *) fb->framebuffer;
+	static void *framebuffer = fb->framebuffer;
+
+
+	if(fb->framebuffer != framebuffer)
+	{
+		while(1);
+	}
 
 	buffer += y * fb->pitch + x * (fb->bpp / 8);
 
@@ -124,7 +132,7 @@ void vterm_scroll(struct framebuffer *fb, struct vterm *vt)
 		c->fg = default_fg;
 	}
 	
-	vterm_flush_all(vt);
+	vt->has_scrolled = true;
 }
 
 void vterm_set_char(char c, unsigned int x, unsigned int y, struct color fg,
@@ -137,14 +145,27 @@ void vterm_set_char(char c, unsigned int x, unsigned int y, struct color fg,
 	cell->dirty = 1;
 }
 
+void vterm_dirty_cell(unsigned int x, unsigned int y, struct vterm *vt)
+{
+	struct console_cell *cell = &vt->cells[y *
+			vt->columns + x];
+	cell->dirty = 1;
+}
+
+inline void do_newline(struct vterm *vt)
+{
+	vterm_dirty_cell(vt->cursor_x, vt->cursor_y, vt);
+	vt->cursor_x = 0;
+	vt->cursor_y++;
+}
+
 void vterm_putc(char c, struct vterm *vt)
 {
 	struct framebuffer *fb = vt->fb;
 
 	if(c == '\n')
 	{
-		vt->cursor_x = 0;
-		vt->cursor_y++;
+		do_newline(vt);
 	}
 	else
 	{
@@ -155,8 +176,7 @@ void vterm_putc(char c, struct vterm *vt)
 	if(vt->cursor_x > vt->columns)
 	{
 		/* Forced newline */
-		vt->cursor_x = 0;
-		vt->cursor_y++;
+		do_newline(vt);
 	}
 
 	if(vt->cursor_y == vt->rows)
@@ -222,13 +242,20 @@ ssize_t vterm_write(const void *buffer, size_t len, struct console *c)
 {
 	ssize_t written = 0;
 	const char *str = (const char *) buffer;
+	struct vterm *vt = (struct vterm *) c->priv;
 	for(size_t i = 0; i != len; str++, written++, len--)
 	{
-		vterm_putc(*str, (struct vterm *) c->priv);
+		vterm_putc(*str, vt);
 	}
 	
-	vterm_flush((struct vterm *) c->priv);
-	update_cursor((struct vterm *) c->priv);
+	if(vt->has_scrolled)
+	{
+		vt->has_scrolled = false;
+		vterm_flush_all(vt);
+	}
+	else
+		vterm_flush(vt);
+	update_cursor(vt);
 	return written;
 }
 
@@ -303,10 +330,13 @@ void vterm_initialize(void)
 		efi_allocate_early_boot_mem(
 		primary_vterm.columns * primary_vterm.rows * sizeof(*primary_vterm.cells));
 
+	assert(primary_vterm.cells != nullptr);
+	primary_vterm.cells = (struct console_cell *) phys_to_virt(primary_vterm.cells);
+
+	memset(primary_vterm.cells, 0, primary_vterm.columns * primary_vterm.rows * sizeof(*primary_vterm.cells));
+
 	primary_vterm.fg = default_fg;
 	primary_vterm.bg = default_bg;
-
-	assert(primary_vterm.cells != NULL);
 
 	console_reset(&primary_console);
 

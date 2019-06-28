@@ -76,10 +76,16 @@ public:
 	void Dump();
 };
 
-struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long min, size_t size);
-struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size, unsigned long flags);
+struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long min,
+					 size_t size);
+struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size,
+			       unsigned long flags, VmObject *vmo);
 void *mmap(struct address_space *as, unsigned long min, size_t size, unsigned long flags);
+void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
+	      size_t size, unsigned long flags);
 int munmap(struct address_space *as, void *addr, size_t size);
+
+void ForEveryRegion(struct address_space *as, bool (*)(struct vm_region *region));
 
 };
 #ifdef __x86_64__

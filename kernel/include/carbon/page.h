@@ -11,12 +11,14 @@
 
 #include <carbon/carbon.h>
 
+#define PAGE_FLAG_DONT_FREE		(1 << 0)
+
 struct page
 {
 	void *paddr;
 	struct page *next;
 	unsigned long ref;
-
+	unsigned long flags;
 	size_t off;		/* Offset in vmo */
 
 	union

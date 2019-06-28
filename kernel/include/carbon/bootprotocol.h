@@ -95,4 +95,10 @@ struct boot_info
 	void *rsdp;
 };
 
+#ifdef __is_carbon_kernel
+
+extern struct boot_info *boot_info;
+
+#endif
+
 #endif

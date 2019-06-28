@@ -9,7 +9,7 @@
 #define ENTROPY_BITS	29
 #define NR_ENTROPY	32
 .section .bss
-.align 4
+.align 16
 stack_bottom:
 	.skip 8192
 stack_top:

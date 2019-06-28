@@ -1,7 +1,7 @@
 HOST?=$(shell ../default-host.sh)
 HOSTARCH:=$(shell ../target-triplet-to-arch.sh $(HOST))
 
-CFLAGS?=-O2 -g
+CFLAGS?=-Os -g
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -31,8 +31,8 @@ include drivers.config
 
 include $(ARCHDIR)/make.config
 
-CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -Wall -Wextra \
--Wno-unused-parameter -Wno-unused-function -static
+CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -march=native -Wall -Wextra \
+-Wno-unused-parameter -Wno-unused-function -static -fstack-protector-strong
 
 ifeq ($(CONFIG_RELOCATABLE), y)
 CFLAGS+=-fpie -DPIC -fno-plt -fno-jump-tables
@@ -58,11 +58,13 @@ $(patsubst %.c,%.o,$(wildcard $(ARCHDIR)/*/*.c)) \
 $(patsubst %.cpp,%.o,$(wildcard kernel/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard kernel/*/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard mm/*.cpp)) \
+$(patsubst %.cpp,%.o,$(wildcard acpi/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard mm/*/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard fs/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard fs/*/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard $(ARCHDIR)/*.cpp)) \
 $(patsubst %.cpp,%.o,$(wildcard $(ARCHDIR)/*/*.cpp)) \
+$(patsubst %.c,%.o,$(wildcard acpica/components/*/*.c)) \
 $(filter-out $(ARCHDIR)/crtn.o, $(filter-out $(ARCHDIR)/crti.o, \
 $(patsubst %.S,%.o,$(wildcard $(ARCHDIR)/*.S))))
 
@@ -106,8 +108,13 @@ acpica/%.o: acpica/%.c
 %.o: %.S
 	@echo [AS] $<
 	@$(CC) -c $(CPPFLAGS) $< -o $@
+
+mm/kasan.o: mm/kasan.cpp
+	@echo [CXX] $< $(CFLAGS) $(CPPFLAGS)
+	@$(CXX) -c $< -o $@ -std=c++14 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -fno-sanitize=kernel-address
+
 %.o: %.cpp
-	@echo [CXX] $<
+	@echo [CXX] $< $(CFLAGS) $(CPPFLAGS)
 	@$(CXX) -c $< -o $@ -std=c++14 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS)
 
 $(ARCHDIR)/__vdso.o: $(ARCHDIR)/__vdso.c

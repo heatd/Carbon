@@ -190,6 +190,8 @@ int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
 	return 0;
 }
 
+void kasan_alloc_shadow(unsigned long addr, size_t size, bool accessible);
+
 namespace Vm
 {
 
@@ -301,48 +303,55 @@ struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long
 	return vm_allocate_region(as, min, size);
 }
 
-struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size, unsigned long flags)
+#define VM_PERM_FLAGS_MASK		(VM_PROT_USER | VM_PROT_WRITE | VM_PROT_EXEC)
+
+struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size,
+			       unsigned long flags, VmObject *vmo)
 {
 	struct vm_region *reg = AllocateRegionInternal(as, min, size);
 
 	if(!reg)
 		return nullptr;
 
-	reg->perms = flags;
+	reg->perms = flags & VM_PERM_FLAGS_MASK;
 
-	VmObjectPhys *phys = new VmObjectPhys(false, size_to_pages(size), reg, nullptr);
+	vmo->SetOwner(reg);
 
-	if(!phys)
-	{
-		vm_destroy_region(as, reg);
-		return nullptr;
-	}
-
-	vm_assign_vmo(reg, phys);
+	vm_assign_vmo(reg, vmo);
 	
 	if(flags & VM_PROT_USER)
 		return reg;
 
-	if(phys->Populate(0, size) < 0)
+	if(vmo->Populate(0, size) < 0)
 	{
-		delete phys;
+		delete vmo;
 		vm_destroy_region(as, reg);
 		return nullptr;
 	}
 
 	if(vm_update_mapping(reg, 0, size) < 0)
 	{
-		delete phys;
+		delete vmo;
 		vm_destroy_region(as, reg);
 		return nullptr;
 	}
+
+	if(as == &kernel_address_space)
+		kasan_alloc_shadow(reg->start, reg->size, true);
 
 	return reg;	
 }
 
 void *mmap(struct address_space *as, unsigned long min, size_t size, unsigned long flags)
 {
-	struct vm_region *region = MmapInternal(as, min, size, flags);
+	VmObjectPhys *phys = new VmObjectPhys(false, size_to_pages(size), nullptr, nullptr);
+
+	if(!phys)
+	{
+		return nullptr;
+	}
+
+	struct vm_region *region = MmapInternal(as, min, size, flags, phys);
 	if(!region)	return nullptr;
 	return (void *) region->start;
 }
@@ -446,6 +455,39 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 	return 0;
 }
 
+void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
+	      size_t size, unsigned long flags)
+{
+	VmObjectMmio *vmo = new VmObjectMmio(false, size_to_pages(size), nullptr, nullptr);
 
+	if(!vmo)
+		return nullptr;
+
+	if(!vmo->Init(phys))
+	{
+		delete vmo;
+		return nullptr;
+	}
+
+	struct vm_region *region = Vm::MmapInternal(as, 0, size, flags, vmo);
+
+	if(!region)
+	{
+		return nullptr;
+	}
+	else
+		return (void *) region->start;
+}
+
+bool ForEveryRegionVisit(const void *key, void *region, void *caller_data)
+{
+	auto func = (bool(*) (struct vm_region *)) caller_data;
+	return func((struct vm_region *) region);
+}
+
+void ForEveryRegion(struct address_space *as, bool (*func)(struct vm_region *region))
+{
+	rb_tree_traverse(as->area_tree, ForEveryRegionVisit, (void *) func);
+}
 /* TODO: Implement mprotect */
 }

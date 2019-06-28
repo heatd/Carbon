@@ -5,6 +5,7 @@
 */
 #include <string.h>
 #include <stdint.h>
+
 void *memset(void *bufptr, int value, size_t size)
 {
 	unsigned char *b = bufptr;

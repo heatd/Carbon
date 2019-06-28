@@ -39,5 +39,8 @@ void get_kernel_limits(struct kernel_limits *l)
 
 bool platform_page_is_used(void *page)
 {
+	if((unsigned long) page == 0)
+		return true;
+
 	return false;
 }

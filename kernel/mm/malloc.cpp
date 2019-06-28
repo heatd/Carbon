@@ -8,21 +8,21 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <carbon/vm.h>
 #include <carbon/lock.h>
 #include <carbon/memory.h>
 #include <carbon/page.h>
-
-struct heap
-{
-	void *starting_address;
-	size_t size;
-	void *brk;
-};
+#include <carbon/heap.h>
 
 static struct heap heap = {};
 uintptr_t starting_address = 0;
+
+struct heap *heap_get()
+{
+	return &heap;
+}
 
 void heap_set_start(uintptr_t heap_start)
 {
@@ -32,17 +32,23 @@ void heap_set_start(uintptr_t heap_start)
 	heap.size = 0;
 }
 
+int kasan_alloc_shadow(unsigned long addr, size_t size, bool accessible);
+
+extern "C"
+void panic(char *);
 void *expand_heap(size_t size)
 {
 	size_t nr_pages = (size >> PAGE_SHIFT) + 3;
 
 	void *alloc_start = heap.brk;
-
+	/*printf("hello???\n");
+	printf("Expanding heap from %p to %lx\n", heap.brk, (unsigned long) alloc_start + nr_pages << PAGE_SHIFT);*/
 	if(!map_pages(alloc_start, PAGE_PROT_GLOBAL | PAGE_PROT_READ |
 		PAGE_PROT_WRITE, nr_pages))
 		return NULL;
-	
+
 	heap.size += nr_pages << PAGE_SHIFT;
+
 	return alloc_start;
 }
 
@@ -58,7 +64,8 @@ void *do_brk_change(intptr_t inc)
 	{
 		size_t size = new_brk - starting_address;
 
-		if(!expand_heap(size))
+		void *ptr = expand_heap(size);
+		if(!ptr)
 			return NULL;
 	}
 

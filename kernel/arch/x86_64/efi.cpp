@@ -18,6 +18,9 @@
 #include <carbon/page.h>
 #include <carbon/x86/idt.h>
 #include <carbon/vm.h>
+#include <carbon/x86/cpu.h>
+#include <carbon/acpi.h>
+#include <carbon/list.h>
 
 struct boot_info *boot_info = NULL;
 
@@ -79,22 +82,48 @@ bool check_for_contig(EFI_MEMORY_DESCRIPTOR *descriptor, size_t size)
 	return true;
 }
 
+bool check_kernel_limits(void *__page);
+
+bool physical_mem_inited = false;
+
+static inline void *temp_map_mem(unsigned long mem)
+{
+	if(physical_mem_inited)
+		return (void *) mem;
+	else
+		return x86_placement_map(mem);
+}
+
 void *__efi_allocate_early_boot_mem(size_t size)
 {
-	size_t desc_size = boot_info->mmap.size_descriptors;
-	EFI_MEMORY_DESCRIPTOR *descriptors = boot_info->mmap.descriptors;
+	struct boot_info *binfo = (struct boot_info *) temp_map_mem((unsigned long) boot_info);
+	size_t desc_size = binfo->mmap.size_descriptors;
+	size_t nr_descs = binfo->mmap.nr_descriptors;
+	EFI_MEMORY_DESCRIPTOR *__descriptors = binfo->mmap.descriptors;
 
-	for(UINTN i = 0; i < boot_info->mmap.nr_descriptors; i++, descriptors =
-		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size))
+	for(UINTN i = 0; i < nr_descs; i++, __descriptors =
+		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) __descriptors + desc_size))
 	{
-		if(!uefi_unusable_region(descriptors))
+		EFI_MEMORY_DESCRIPTOR *descriptors =
+			(EFI_MEMORY_DESCRIPTOR *) temp_map_mem((unsigned long) __descriptors);
+
+		/* Only use safe memory types since then we don't have to check for modules, etc */
+		if(descriptors->Type == EfiConventionalMemory || descriptors->Type == EfiBootServicesData ||
+			descriptors->Type == EfiBootServicesCode)
 		{
+			if(descriptors->PhysicalStart == 0)
+			{
+				/* NULL page might be interpreted as an OOM, so skip it */
+				descriptors->PhysicalStart += PAGE_SIZE;
+				descriptors->NumberOfPages--;
+			}
+
 			if(descriptors->NumberOfPages << PAGE_SHIFT >= size)
 			{
 				/* Note: We only check at the beginning of
 				  descriptors for simplicity, since otherwise
 				  we would need to split them bcs of holes */
-				if(check_for_contig(descriptors, size) == false)
+				if(check_kernel_limits((void *) descriptors->PhysicalStart) == true)
 					continue;
 				descriptors->NumberOfPages -= size >> PAGE_SHIFT;
 				void *ret = (void *) descriptors->PhysicalStart;
@@ -143,7 +172,7 @@ void *efi_get_phys_mem_reg(uintptr_t *base, uintptr_t *size, void *context)
 
 	for(UINTN i = 0; i < curr_entry; i++, descriptors =
 		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size));
-	printf("Free region at %u %016lx-%016lx\n", curr_entry, descriptors->PhysicalStart,
+	printf("Free region at %llu %016lx-%016lx\n", curr_entry, descriptors->PhysicalStart,
 				descriptors->PhysicalStart +
 				descriptors->NumberOfPages * PAGE_SIZE);
 
@@ -195,6 +224,15 @@ struct framebuffer efi_fb =
 
 void vterm_initialize(void);
 
+void setup_debug_register(unsigned long addr, unsigned int size, unsigned int condition)
+{
+	unsigned long dr7 = 1 | size << 18 | condition << 16;
+
+	__asm__ volatile("mov %0, %%dr0; mov %1, %%dr7" :: "r"(addr), "r"(dr7));
+}
+
+void asan_init();
+
 void efi_setup_framebuffer(struct boot_info *info)
 {
 	//printf("efifb: Framebuffer %lx\n", info->fb.framebuffer);
@@ -219,10 +257,16 @@ void heap_set_start(uintptr_t heap_start);
 extern "C" void efi_entry(struct boot_info *info)
 {
 	x86_serial_init();
+	x86_setup_early_physical_mappings();
+
+	boot_info = info;
+
+	x86::Cpu::Identify();
+
 	x86_setup_physical_mappings();
 
 	/* Fixup boot info */
-	info = (struct boot_info *) phys_to_virt(info);
+	boot_info = info = (struct boot_info *) phys_to_virt(info);
 	info->command_line = (wchar_t *) phys_to_virt(info->command_line);
 	info->mmap.descriptors = (EFI_MEMORY_DESCRIPTOR *) phys_to_virt(info->mmap.descriptors);
 	if(info->modules) info->modules = (struct module *) phys_to_virt(info->modules);
@@ -232,7 +276,7 @@ extern "C" void efi_entry(struct boot_info *info)
 		m->next = (struct module *) phys_to_virt(m->next);
 	}
 
-	boot_info = info;
+	physical_mem_inited = true;
 
 	efi_setup_framebuffer(info);
 
@@ -246,6 +290,10 @@ extern "C" void efi_entry(struct boot_info *info)
 	heap_set_start(heap_start);
 
 	vm_init();
+
+	asan_init();
+
+	Acpi::Init();
 
 	struct Page::page_usage usage;
 	Page::GetStats(&usage);

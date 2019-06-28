@@ -36,17 +36,18 @@ void append_module(struct module *module)
 	}
 }
 
+struct relocation **rp = NULL;
 void append_relocation(struct relocation *reloc)
 {
-	if(!boot_info->relocations)
+	if(!rp)
 	{
 		boot_info->relocations = reloc;
+		rp = &reloc->next;
 	}
 	else
 	{
-		struct relocation *r = boot_info->relocations;
-		while(r->next) r = r->next;
-		r->next = reloc;
+		*rp = reloc;
+		rp = &reloc->next;
 	}
 }
 

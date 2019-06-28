@@ -14,7 +14,9 @@
 
 #define PHYS_BASE		0xffff880000000000
 
-void x86_setup_physical_mappings(void);
+void x86_setup_early_physical_mappings(void);
+void x86_setup_physical_mappings();
+void *x86_placement_map(unsigned long phys);
 void efi_setup_physical_memory(struct boot_info *info);
 bool page_is_used(struct boot_info *info, void *p);
 

@@ -4,6 +4,7 @@
 * check LICENSE at the root directory for more information
 */
 #include <stdio.h>
+#include <string.h>
 
 #include <carbon/lock.h>
 #include <carbon/vmobject.h>
@@ -251,4 +252,34 @@ void VmObject::TruncateBeginningAndResize(size_t off)
 	PurgePages(0, off, PURGE_SHOULD_FREE);
 	UpdateOffsets(off);
 	nr_pages -= (off >> PAGE_SHIFT);
+}
+
+bool VmObjectMmio::Init(unsigned long phys)
+{
+	auto original_phys = phys;
+	auto pages = new struct page[nr_pages];
+	if(!pages)
+		return false;
+	
+	memset(pages, 0, sizeof(struct page) * nr_pages);
+
+	for(size_t i = 0; i < nr_pages; i++)
+	{
+		pages[i].paddr = (void *) phys;
+		pages[i].off = phys - original_phys;
+		pages[i].ref = 1;
+		pages[i].flags = PAGE_FLAG_DONT_FREE;
+		if(i != 0)	pages[i - 1].next_un.next_allocation = &pages[i];
+
+		phys += PAGE_SIZE;
+	}
+
+	page_list = pages;
+
+	return true;
+}
+
+int VmObjectMmio::Commit(size_t offset)
+{
+	return 0;
 }

@@ -42,6 +42,7 @@ struct page_list
 struct page_cpu
 {
 	struct page_arena *arenas;
+	struct page_arena *arena_tail;
 	struct processor *cpu;
 	struct page_cpu *next;
 };
@@ -266,11 +267,15 @@ static int page_add(struct page_arena *arena, void *__page,
 
 static void append_arena(struct page_cpu *cpu, struct page_arena *arena)
 {
-	struct page_arena **a = &cpu->arenas;
-
-	while(*a)
-		a = &(*a)->next;
-	*a = arena;
+	if(!cpu->arenas)
+	{
+		cpu->arenas = cpu->arena_tail = arena;
+	}
+	else
+	{
+		cpu->arena_tail->next = arena;
+		cpu->arena_tail = arena;
+	}
 }
 
 static void page_add_region(uintptr_t base, size_t size, struct boot_info *info)
@@ -385,7 +390,8 @@ void free_page(struct page *p)
 	if(page_unref(p) == 0)
 	{
 		p->next_un.next_allocation = NULL;
-		page_free(1, p->paddr);
+		if(!(p->flags & PAGE_FLAG_DONT_FREE))
+			page_free(1, p->paddr);
 	}
 }
 

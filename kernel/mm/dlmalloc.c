@@ -521,6 +521,8 @@ MAX_RELEASE_CHECK_RATE   default: 4095 unless not HAVE_MMAP
   improvement at the expense of carrying around more memory.
 */
 
+void kasan_set_state(unsigned long *ptr, unsigned long size, int state);
+
 /* Version identifier to allow people to support multiple versions */
 #ifndef DLMALLOC_VERSION
 #define DLMALLOC_VERSION 20806
@@ -4689,6 +4691,7 @@ void* dlmalloc(size_t bytes) {
 
   postaction:
     POSTACTION(gm);
+    //kasan_set_state(mem, bytes, 0);
     return mem;
   }
 
@@ -4718,6 +4721,7 @@ void dlfree(void* mem) {
       check_inuse_chunk(fm, p);
       if (RTCHECK(ok_address(fm, p) && ok_inuse(p))) {
         size_t psize = chunksize(p);
+        //kasan_set_state(mem, psize, 1);
         mchunkptr next = chunk_plus_offset(p, psize);
         if (!pinuse(p)) {
           size_t prevsize = p->prev_foot;
@@ -5246,6 +5250,7 @@ void* dlrealloc(void* oldmem, size_t bytes) {
       }
     }
   }
+  //kasan_set_state(mem, bytes, 0);
   return mem;
 }
 

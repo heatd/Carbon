@@ -41,6 +41,11 @@ public:
 		 : owner(owner), nr_pages(nr_pages), page_list(init_pages), lock()
 	{};
 
+	inline void SetOwner(struct vm_region *_owner)
+	{
+		owner = _owner;
+	}
+
 	virtual ~VmObject(){};
 	int Fork();
 	virtual int Commit(size_t offset) = 0;
@@ -74,6 +79,22 @@ public:
 		VmObjectPhys *p = new VmObjectPhys(should_demand_page, nr_pages, owner, page_list);
 		return p;
 	}
+};
+
+class VmObjectMmio : public VmObject
+{
+
+public:
+	using VmObject::VmObject;
+	~VmObjectMmio(){}
+	bool Init(unsigned long phys);
+	int Commit(size_t offset);
+	VmObject *CreateCopy()
+	{
+		VmObjectMmio *mmio = new VmObjectMmio(should_demand_page, nr_pages, owner, page_list);
+		return mmio;
+	}
+	
 };
 
 #endif

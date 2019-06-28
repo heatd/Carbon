@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <string.h>
 
 #include <carbon/page.h>
 #include <carbon/vm.h>
@@ -21,6 +22,7 @@
 struct page_hashtable
 {
 	struct page *table[PAGE_HASHTABLE_ENTRIES];
+	struct page *tail[PAGE_HASHTABLE_ENTRIES];
 };
 
 static struct page_hashtable hashtable = {0};
@@ -36,13 +38,12 @@ static void append_to_hash(unsigned int hash, struct page *page)
 {
 	if(!hashtable.table[hash])
 	{
-		hashtable.table[hash] = page;
+		hashtable.table[hash] = hashtable.tail[hash] = page;
 	}
 	else
 	{
-		struct page *p = hashtable.table[hash];
-		while(p->next) p = p->next;
-		p->next = page;
+		hashtable.tail[hash]->next = page;
+		hashtable.tail[hash] = page;
 	}
 }
 
@@ -54,6 +55,8 @@ struct page *page_add_page(void *paddr)
 	struct page *page = (struct page *) __ksbrk(sizeof(struct page));
 
 	assert(page != NULL);
+
+	memset(page, 0, sizeof(*page));
 
 	page->paddr = paddr;
 	page->ref = 0;
