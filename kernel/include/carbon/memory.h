@@ -40,12 +40,6 @@ void __kbrk(void *break_);
 void unmap_page_range(void *as, void *addr, size_t len);
 void flush_tlb(void *addr, size_t nr_pages);
 
-#define PAGE_PROT_READ		(1 << 0)
-#define PAGE_PROT_WRITE		(1 << 1)
-#define PAGE_PROT_EXECUTE	(1 << 2)
-#define PAGE_PROT_USER		(1 << 3)
-#define PAGE_PROT_GLOBAL	(1 << 4)
-
 void malloc_reserve_memory_space(void);
 
 static inline void *page_align_up(void *ptr)

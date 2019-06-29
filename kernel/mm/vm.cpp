@@ -336,8 +336,10 @@ struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size
 		return nullptr;
 	}
 
+#if 0
 	if(as == &kernel_address_space)
 		kasan_alloc_shadow(reg->start, reg->size, true);
+#endif
 
 	return reg;	
 }

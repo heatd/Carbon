@@ -8,59 +8,16 @@
 #include <stdint.h>
 
 #include <carbon/x86/idt.h>
+#include <carbon/interrupt.h>
 
 idt_ptr_t idt_ptr;
 idt_entry_t idt_entries[256];
 extern "C" void idt_flush(uint64_t addr);
 
-void x86_reserve_vector(int vector, void (*handler)())
+void x86_reserve_vector(unsigned int vector, void (*handler)())
 {
 	assert(vector < 256);
 	idt_create_descriptor(vector, (uintptr_t) handler, 0x08, 0x8E);
-}
-
-int x86_allocate_vector(void (*handler)())
-{
-	for(int i = 0; i < 256; i++)
-	{
-		if(idt_entries[i].selector == 0)
-		{
-			x86_reserve_vector(i, handler);
-			return i;
-		}
-	}
-	return -1;
-}
-
-int x86_allocate_vectors(int nr)
-{
-	int int_base = -1;
-	int found_vecs = 0;
-	for(int i = 0; i < 256; i++)
-	{
-		if(idt_entries[i].selector == 0)
-		{
-			if(!found_vecs)
-				int_base = i;
-			found_vecs++;
-			if(found_vecs == nr)
-			{
-				/* Reserve the entries */
-				for(int j = 0; j < nr; j++)
-				{
-					/* We'll use selector to mean if it is reserved */
-					idt_entries[int_base + j].selector = 1;
-				}
-				return int_base;
-			}
-		}
-		else
-		{
-			int_base = -1;
-			found_vecs = 0;
-		}
-	}
-	return -1;
 }
 
 void x86_init_exceptions(void)
@@ -99,6 +56,7 @@ void x86_init_exceptions(void)
 	x86_reserve_vector(29, isr29);
 	x86_reserve_vector(30, isr30);
 	x86_reserve_vector(31, isr31);
+	Interrupt::ReserveInterrupts(0, 32);
 	//idt_set_system_gate(129,  (uint64_t) _sched_yield, 0x08, 0x8e);
 	//x86_reserve_vector(X86_MESSAGE_VECTOR, __cpu_handle_message);
 	//x86_reserve_vector(255,  apic_spurious_irq);

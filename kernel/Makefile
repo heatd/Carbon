@@ -31,7 +31,8 @@ include drivers.config
 
 include $(ARCHDIR)/make.config
 
-CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -march=native -Wall -Wextra \
+CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -march=native -Wall -Wextra -Werror \
+-Wno-write-strings -Wno-expansion-to-defined \
 -Wno-unused-parameter -Wno-unused-function -static -fstack-protector-strong
 
 ifeq ($(CONFIG_RELOCATABLE), y)

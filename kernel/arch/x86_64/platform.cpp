@@ -7,15 +7,34 @@
 #include <carbon/x86/apic.h>
 #include <carbon/platform.h>
 
-void Platform::Irq::MaskLine(::Irq::IrqLine line)
+/* Eww */
+using namespace x86;
+
+void Platform::Irq::MaskLine(::Irq::IrqLine gsi)
 {
 	/* In x86, pin = line for APIC purposes */
-	if(line < x86::Apic::NumPins)
-		x86::Apic::MaskPin(line);
+	if(!(gsi < x86::Apic::NumPins))
+		return;
+
+	gsi = Apic::MapSourceGsiToDest(gsi);
+
+	Apic::IoApic *apic = Apic::GsiToApic(gsi);	
+
+	Apic::IrqPin pin = apic->GetPinFromGsi(gsi);
+
+	apic->MaskPin(pin);
 }
 
-void Platform::Irq::UnmaskLine(::Irq::IrqLine line)
+void Platform::Irq::UnmaskLine(::Irq::IrqLine gsi)
 {
-	if(line < x86::Apic::NumPins)
-		x86::Apic::UnmaskPin(line);
+	if(!(gsi < x86::Apic::NumPins))
+		return;
+
+	gsi = Apic::MapSourceGsiToDest(gsi);
+	Apic::IoApic *apic = Apic::GsiToApic(gsi);	
+
+	Apic::IrqPin pin = apic->GetPinFromGsi(gsi);
+
+	apic->UnmaskPin(pin);
+
 }

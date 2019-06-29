@@ -1,5 +1,13 @@
+/*
+* Copyright (c) 2019 Pedro Falcato
+* This file is part of Carbon, and is released under the terms of the MIT License
+* check LICENSE at the root directory for more information
+*/
+
 #include <stdlib.h>
 #include <stdint.h>
+
+#include <carbon/interrupt.h>
 
 struct idt_ptr
 {
@@ -26,9 +34,7 @@ void idt_create_descriptor(uint8_t entry, uint64_t offset, uint16_t selector, ui
 void idt_set_system_gate(uint8_t entry, uint64_t offset, uint16_t selector, uint8_t flags);
 void idt_load();
 void x86_init_exceptions(void);
-void x86_reserve_vector(int vector, void (*handler)());
-int x86_allocate_vector(void (*handler)());
-int x86_allocate_vectors(int nr);
+void x86_reserve_vector(Interrupt::InterruptVector vector, void (*handler)());
 
 extern "C" void isr0();
 extern "C" void isr1();

@@ -11,26 +11,28 @@
 
 #define NR_IRQ 				221
 
+struct registers;
+
 namespace Irq
 {
 
 class IrqHandler;
 bool InstallIrq(IrqHandler *handler);
 void FreeIrq(IrqHandler *handler);
-
 using IrqLine = unsigned int;
 
 #define IRQ_BAD_LINE		((unsigned int) -1)
 
-struct registers;
 struct IrqContext
 {
 	struct registers *registers;
 	Device *device;
-	Device *driver;
+	Driver *driver;
 	IrqLine line;
 	void *context;
 };
+
+void DispatchIrq(IrqContext& context);
 
 using IrqCallback = bool (*)(struct IrqContext& context);
 
@@ -65,6 +67,16 @@ public:
 	inline IrqCallback GetCallback()
 	{
 		return callback;
+	}
+
+	inline Device *GetDevice()
+	{
+		return device;
+	}
+
+	inline Driver *GetDriver()
+	{
+		return driver;
 	}
 
 	inline void SetContext(void *Context)

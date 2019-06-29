@@ -546,6 +546,7 @@ void kasan_set_state(unsigned long *ptr, unsigned long size, int state);
 #ifdef __is_carbon_kernel
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
+#include <carbon/panic.h>
 #define ABORT panic("abort: dlmalloc error at "TOSTRING(__LINE__)"!")
 #endif
 #endif /*__onyx*/

@@ -46,4 +46,25 @@ void FreeIrq(IrqHandler *handler)
 	}
 }
 
+void DispatchIrq(IrqContext& context)
+{
+	auto line = context.line;
+
+	auto& list = irq_lines[line];
+
+	for(auto handler : list)
+	{
+		context.device = handler->GetDevice();
+		context.driver = handler->GetDriver();
+		context.context = handler->GetContext();
+
+		auto callback = handler->GetCallback();
+
+		if(callback(context) == true)
+		{
+			break;
+		}
+	}
+}
+
 }

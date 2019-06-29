@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <carbon/vm.h>
 #include <carbon/lock.h>
@@ -43,8 +44,7 @@ void *expand_heap(size_t size)
 	void *alloc_start = heap.brk;
 	/*printf("hello???\n");
 	printf("Expanding heap from %p to %lx\n", heap.brk, (unsigned long) alloc_start + nr_pages << PAGE_SHIFT);*/
-	if(!map_pages(alloc_start, PAGE_PROT_GLOBAL | PAGE_PROT_READ |
-		PAGE_PROT_WRITE, nr_pages))
+	if(!map_pages(alloc_start, VM_PROT_WRITE, nr_pages))
 		return NULL;
 
 	heap.size += nr_pages << PAGE_SHIFT;
@@ -66,7 +66,7 @@ void *do_brk_change(intptr_t inc)
 
 		void *ptr = expand_heap(size);
 		if(!ptr)
-			return NULL;
+			return errno = ENOMEM, (void *) -1;
 	}
 
 	heap.brk = (void*) new_brk;

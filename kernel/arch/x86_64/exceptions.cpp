@@ -99,7 +99,6 @@ void page_fault_handler(intctx_t *ctx)
 {
 	auto error_code = ctx->err_code;
 	bool write = error_code & 0x2;
-	bool read = write ? 0 : 1;
 	bool exec = error_code & 0x10;
 	bool user = error_code & 0x4;
 

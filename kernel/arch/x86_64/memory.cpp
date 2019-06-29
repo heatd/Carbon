@@ -145,9 +145,9 @@ void *x86_placement_map(unsigned long _phys)
 	//printf("phys: %lx\n", phys);
 
 	/* Map two pages so memory that spans both pages can get accessed */
-	map_phys_to_virt(placement_mappings_start, phys, PAGE_PROT_WRITE | PAGE_PROT_GLOBAL);
+	map_phys_to_virt(placement_mappings_start, phys, VM_PROT_WRITE);
 	map_phys_to_virt(placement_mappings_start + PAGE_SIZE, phys + PAGE_SIZE,
-						PAGE_PROT_WRITE | PAGE_PROT_GLOBAL);
+						VM_PROT_WRITE);
 	__native_tlb_invalidate_page((void *) placement_mappings_start);
 	__native_tlb_invalidate_page((void *) (placement_mappings_start + PAGE_SIZE));
 	return (void *) (placement_mappings_start + (_phys - phys));
@@ -176,7 +176,7 @@ void x86_setup_placement_mappings(void)
 		}
 		else
 		{
-			unsigned long page;
+			unsigned long page = 0;
 			if(i == 3)
 			{
 				page = ((unsigned long) &placement_mappings_page_dir - base_address);
@@ -225,7 +225,7 @@ void x86_setup_early_physical_mappings(void)
 	{
 		uintptr_t p = j * 0x200000; 
 
-		pd->entries[j] = p | 0x83 | (1 << 63);
+		pd->entries[j] = p | 0x83 | (1UL << 63);
 	}
 
 	x86_setup_placement_mappings();
@@ -237,14 +237,7 @@ void *efi_allocate_early_boot_mem(size_t size);
 
 void x86_setup_physical_mappings()
 {
-	const unsigned int paging_levels = 4;
-	unsigned int indices[paging_levels];
 	const unsigned long virt = PHYS_BASE;
-
-	for(unsigned int i = 0; i < paging_levels; i++)
-	{
-		indices[i] = (virt >> 12) >> (i * 9) & 0x1ff;
-	}
 
 	bool is_huge_supported = x86::Cpu::HasCap(X86_FEATURE_PDPE1GB);
 
@@ -279,7 +272,7 @@ void x86_setup_physical_mappings()
 			{
 				uintptr_t p = i * 512 * 0x200000 + j * 0x200000;
 
-				pd->entries[j] = p | 0x83 | (1 << 63);
+				pd->entries[j] = p | 0x83 | (1UL << 63);
 			}
 
 			entry++;
@@ -301,8 +294,15 @@ void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 
 	bool is_write = prot & VM_PROT_WRITE;
 	bool is_user = prot & VM_PROT_USER;
-	bool is_global = is_user;
+	bool is_global = !is_user;
 	bool is_nx = !(prot & VM_PROT_EXEC);
+
+	if(!is_nx && is_write)
+	{
+		printf("map_phys_to_virt: Error: mapping of %lx"
+		" at %lx violates W^X\n", phys, virt);
+		return nullptr;
+	}
 
 	for(unsigned int i = 0; i < paging_levels; i++)
 	{

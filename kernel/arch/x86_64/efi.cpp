@@ -19,6 +19,7 @@
 #include <carbon/x86/idt.h>
 #include <carbon/vm.h>
 #include <carbon/x86/cpu.h>
+#include <carbon/x86/apic.h>
 #include <carbon/acpi.h>
 #include <carbon/list.h>
 
@@ -172,7 +173,7 @@ void *efi_get_phys_mem_reg(uintptr_t *base, uintptr_t *size, void *context)
 
 	for(UINTN i = 0; i < curr_entry; i++, descriptors =
 		(EFI_MEMORY_DESCRIPTOR*) ((uintptr_t) descriptors + desc_size));
-	printf("Free region at %llu %016lx-%016lx\n", curr_entry, descriptors->PhysicalStart,
+	printf("Free region at %lu %016lx-%016lx\n", curr_entry, descriptors->PhysicalStart,
 				descriptors->PhysicalStart +
 				descriptors->NumberOfPages * PAGE_SIZE);
 
@@ -232,6 +233,7 @@ void setup_debug_register(unsigned long addr, unsigned int size, unsigned int co
 }
 
 void asan_init();
+extern "C" void _init();
 
 void efi_setup_framebuffer(struct boot_info *info)
 {
@@ -291,24 +293,16 @@ extern "C" void efi_entry(struct boot_info *info)
 
 	vm_init();
 
+#if 0
 	asan_init();
+#endif
+
+	/* Invoke global constructors */
+	_init();
 
 	Acpi::Init();
 
-	struct Page::page_usage usage;
-	Page::GetStats(&usage);
-
-	printf("Used pages: %lu (%lu KiB)\n", usage.used_pages, usage.used_pages * PAGE_SIZE / 1024);
-
-	size_t size = 0x400000;
-	void *ptr = Vm::mmap(&kernel_address_space, 0, size, VM_PROT_USER | VM_PROT_WRITE);
-	memset(ptr, 0xff, size);
-
-	Vm::munmap(&kernel_address_space, (void *)((unsigned long) ptr + 0x1000), size);
-
-	Page::GetStats(&usage);
-
-	printf("Used pages: %lu (%lu KiB)\n", usage.used_pages, usage.used_pages * PAGE_SIZE / 1024);
+	x86::Apic::Init();
 
 	while(1)
 		__asm__ __volatile__("hlt");

@@ -25,7 +25,7 @@ struct page_hashtable
 	struct page *tail[PAGE_HASHTABLE_ENTRIES];
 };
 
-static struct page_hashtable hashtable = {0};
+static struct page_hashtable hashtable = {};
 static size_t num_pages = 0;
 
 unsigned int page_hash(uintptr_t p)

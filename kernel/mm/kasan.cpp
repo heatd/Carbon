@@ -3,7 +3,7 @@
 * This file is part of Onyx, and is released under the terms of the MIT License
 * check LICENSE at the root directory for more information
 */
-
+#if 0
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -203,7 +203,7 @@ int kasan_alloc_shadow(unsigned long addr, size_t size, bool accessible)
 	printf("Kasan end: %lx\n", kasan_end);
 	printf("Actual start: %lx\nActual end: %lx\n", actual_start, actual_end);*/
 
-	assert(map_pages((void *) kasan_start, PAGE_PROT_GLOBAL | PAGE_PROT_WRITE | PAGE_PROT_READ,
+	assert(map_pages((void *) kasan_start, VM_PROT_WRITE,
 		(kasan_end - kasan_start) >> PAGE_SHIFT) != nullptr);
 	/* Mask excess bytes as redzones */
 	memset((void *) kasan_start, KASAN_REDZONE, actual_start - kasan_start);
@@ -227,3 +227,5 @@ void kasan_set_state(unsigned long *ptr, size_t size, int state)
 		size_t to_set = size < 8 - n ? size : 8 - n;
 	}
 }
+
+#endif

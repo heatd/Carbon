@@ -87,6 +87,8 @@ struct console serial_console =
 	.name = "com1",
 	.write = serial_console_write,
 	.read = serial_console_read,
+	.priv = nullptr,
+	.next = nullptr
 };
 
 void x86_serial_init(void)

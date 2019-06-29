@@ -3,12 +3,14 @@
 * This file is part of Carbon, and is released under the terms of the MIT License
 * check LICENSE at the root directory for more information
 */
-
+#include <string.h>
 #include <stdint.h>
 #include <cpuid.h>
 #include <stdio.h>
 
 #include <carbon/x86/cpu.h>
+#include <carbon/cpu.h>
+#include <carbon/x86/msr.h>
 
 namespace x86
 {
@@ -69,3 +71,16 @@ bool HasCap(int cap)
 };
 
 };
+
+Cpu *SetupPerCpuStruct()
+{
+	Cpu *c = new Cpu;
+	if(!c)
+		return nullptr;
+
+	memset(c, 0, sizeof(Cpu));
+	c->self = c;
+	wrmsr(GS_BASE_MSR, (unsigned long) c);
+
+	return c;
+}

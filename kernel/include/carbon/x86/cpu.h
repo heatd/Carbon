@@ -4,8 +4,8 @@
 * check LICENSE at the root directory for more information
 */
 
-#ifndef _CARBON_CPU_H
-#define _CARBON_CPU_H
+#ifndef _CARBON_X86_CPU_H
+#define _CARBON_X86_CPU_H
 
 namespace x86
 {
@@ -209,6 +209,16 @@ void Identify();
 static inline void Relax(void)
 {
 	__asm__ __volatile__("pause" ::: "memory");
+}
+
+inline void DisableInterrupts()
+{
+	__asm__ __volatile__("cli");
+}
+
+inline void EnableInterrupts()
+{
+	__asm__ __volatile__("sti");
 }
 
 };
