@@ -27,7 +27,17 @@ SECTIONS
 		. += 0x1000;
 		. += 0x8000;
 	}
+	cpu_phys_base = .;
+	. = 0;
 
+	.percpu : AT(cpu_phys_base)
+	{
+		__percpu_start = .;
+		*(.percpu*)
+		__percpu_end = .;
+	}
+	
+	. += cpu_phys_base;
 	. += VIRT_BASE;
 	.text ALIGN(0x1000) : AT(ADDR(.text) - VIRT_BASE)
 	{
@@ -55,9 +65,6 @@ SECTIONS
 	.data ALIGN(0x1000) : AT(ADDR(.data) - VIRT_BASE)
 	{
 		*(.data)
-		__percpu_start = .;
-		*(.percpu*)
-		__percpu_end = .;
 		*(.gnu.linkonce.d*)
 	}
 

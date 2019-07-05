@@ -13,6 +13,7 @@
 #include <carbon/font.h>
 #include <carbon/console.h>
 #include <carbon/memory.h>
+#include <carbon/lock.h>
 
 struct color
 {
@@ -40,6 +41,7 @@ struct vterm
 	struct color fg;
 	struct color bg;
 	bool has_scrolled;
+	Spinlock vterm_lock;
 };
 
 static inline uint32_t unpack_rgba(struct color color, struct framebuffer *fb)
@@ -243,6 +245,9 @@ ssize_t vterm_write(const void *buffer, size_t len, struct console *c)
 	ssize_t written = 0;
 	const char *str = (const char *) buffer;
 	struct vterm *vt = (struct vterm *) c->priv;
+
+	ScopedSpinlock guard{&vt->vterm_lock};
+
 	for(size_t i = 0; i != len; str++, written++, len--)
 	{
 		vterm_putc(*str, vt);

@@ -78,4 +78,4 @@ qemu: iso
 	-monitor stdio -boot d -netdev user,id=u1 -device e1000,netdev=u1 \
 	-object filter-dump,id=f1,netdev=u1,file=net.pcap \
 	--enable-kvm -smp cores=2,sockets=2 -cpu host,migratable=no -d int -vga std \
-	-bios OVMF.fd -usb
+	-bios OVMF.fd -usb -no-reboot -no-shutdown

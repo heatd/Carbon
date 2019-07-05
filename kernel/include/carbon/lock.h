@@ -12,24 +12,29 @@
 struct spinlock
 {
 	unsigned long lock;
+	unsigned long old_flags;
 };
 
 void spin_lock(struct spinlock *lock);
+void spin_lock_irqsave(struct spinlock *lock);
 void spin_unlock(struct spinlock *lock);
+void spin_unlock_irqrestore(struct spinlock *lock);
 
 class Spinlock
 {
 private:
 	struct spinlock lock;
 public:
-	Spinlock() : lock({0}){};
+	Spinlock() : lock({0, 0}){};
 	~Spinlock();
 	void Lock();
+	void LockIrqsave();
 	void Unlock();
+	void UnlockIrqrestore();
 	bool IsLocked();
 };
 
-template <typename LockType>
+template <typename LockType, bool irq_save = false>
 class ScopedLock
 {
 private:
@@ -38,13 +43,19 @@ private:
 public:
 	void Lock()
 	{
-		internal_lock->Lock();
+		if(irq_save)
+			internal_lock->LockIrqsave();
+		else
+			internal_lock->Lock();
 		IsLocked = true;
 	}
 
 	void Unlock()
 	{
-		internal_lock->Unlock();
+		if(irq_save)
+			internal_lock->UnlockIrqrestore();
+		else
+			internal_lock->Unlock();
 		IsLocked = false;
 	}
 
@@ -60,6 +71,7 @@ public:
 	}
 };
 
-typedef ScopedLock<Spinlock> ScopedSpinlock;
+using ScopedSpinlock = ScopedLock<Spinlock>;
+using ScopedSpinlockIrqsave = ScopedLock<Spinlock, true>;
 
 #endif

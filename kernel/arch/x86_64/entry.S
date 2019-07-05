@@ -6,41 +6,7 @@
 
 .section .text
 
-.macro pushaq
-	push %rax
-	push %rbx
-	push %rcx
-	push %rdx
-	push %rdi
-	push %rsi
-	push %rbp
-	push %r8
-	push %r9
-	push %r10
-	push %r11
-	push %r12
-	push %r13
-	push %r14
-	push %r15
-.endm
-
-.macro popaq
-	pop %r15
-	pop %r14
-	pop %r13
-	pop %r12
-	pop %r11
-	pop %r10
-	pop %r9
-	pop %r8
-	pop %rbp
-	pop %rsi
-	pop %rdi
-	pop %rdx
-	pop %rcx
-	pop %rbx
-	pop %rax
-.endm
+#include "register_ops.S"
 
 .global isr_common
 isr_common:
@@ -156,6 +122,9 @@ irq_common:
 	call signal_is_pending
 	cmp $1, %rax
 	je .L4
+.global x86_scheduler_exit
+x86_scheduler_exit:
+	/* We'll use this bit of code as a trampoline to the new thread too */
 .L5:
 	mov IRQ_STACK_OFF_CS(%rsp), %rax
 	cmp $KERNEL_CS, %rax

@@ -4,8 +4,8 @@
 * check LICENSE at the root directory for more information
 */
 
-#ifndef _CARBON_REGISTERS_H
-#define _CARBON_REGISTERS_H
+#ifndef _CARBON_X86_REGISTERS_H
+#define _CARBON_X86_REGISTERS_H
 
 struct registers
 {

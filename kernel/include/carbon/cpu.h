@@ -12,27 +12,16 @@
 
 #endif
 
-struct Cpu
+#include <carbon/lock.h>
+
+namespace Scheduler
 {
-	unsigned long sched_quantum;
-	struct Cpu *self;
-#ifdef __x86_64__
-	x86::Apic::Lapic *lapic;
-	unsigned long apic_ticks;
-#endif 	
+
+struct thread;
 };
 
-Cpu *SetupPerCpuStruct();
+using Scheduler::thread;
 
-inline Cpu *GetPerCpu()
-{
-	Cpu *c;
-#ifdef __x86_64__
-	__asm__ __volatile__("movq %%gs:0x8, %0":"=r"(c));
-#else
-	#error "Not implemented"
-#endif
-	return c;
-}
+#define NR_PRIO		40
 
 #endif

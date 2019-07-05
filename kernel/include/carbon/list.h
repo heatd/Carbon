@@ -87,7 +87,6 @@ class LinkedList
 {
 private:
 	LinkedListNode<T> *head, *tail;
-	Spinlock lock;
 public:
 	LinkedList<T>() : head(nullptr), tail(nullptr){}
 	

@@ -71,16 +71,3 @@ bool HasCap(int cap)
 };
 
 };
-
-Cpu *SetupPerCpuStruct()
-{
-	Cpu *c = new Cpu;
-	if(!c)
-		return nullptr;
-
-	memset(c, 0, sizeof(Cpu));
-	c->self = c;
-	wrmsr(GS_BASE_MSR, (unsigned long) c);
-
-	return c;
-}

@@ -69,14 +69,17 @@ int VmObject::Populate(size_t starting_off, size_t region_size)
 
 struct page *VmObject::Get(size_t offset)
 {
-	ScopedSpinlock l(&lock);
+	lock.Lock();
 
 	for(auto page : page_list)
 	{
 		if(page->off == offset)
+		{
 			return page;
+		}
 	}
 
+	lock.Unlock();
 	return nullptr;
 }
 

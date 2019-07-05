@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <limits.h>
 
+#include <carbon/percpu.h>
 #include <carbon/page.h>
 #include <carbon/memory.h>
 #include <carbon/bootprotocol.h>
@@ -22,6 +23,8 @@
 #include <carbon/x86/apic.h>
 #include <carbon/acpi.h>
 #include <carbon/list.h>
+#include <carbon/scheduler.h>
+#include <carbon/cpu.h>
 
 struct boot_info *boot_info = NULL;
 
@@ -256,6 +259,15 @@ void efi_setup_framebuffer(struct boot_info *info)
 
 void heap_set_start(uintptr_t heap_start);
 
+void thread_test(void *context)
+{
+	while(true)
+	{
+		printf("Thread1\n");
+		Scheduler::Yield();
+	}
+}
+
 extern "C" void efi_entry(struct boot_info *info)
 {
 	x86_serial_init();
@@ -300,10 +312,23 @@ extern "C" void efi_entry(struct boot_info *info)
 	/* Invoke global constructors */
 	_init();
 
+	Percpu::Init();
+
+	Scheduler::Initialize();
+
 	Acpi::Init();
 
 	x86::Apic::Init();
 
+#if 0
+	struct thread *thread = Scheduler::CreateThread(thread_test, nullptr, Scheduler::CREATE_THREAD_KERNEL);
+
+	Scheduler::StartThread(thread);
+#endif
+
 	while(1)
-		__asm__ __volatile__("hlt");
+	{
+		/* printf("Thread0\n");
+		Scheduler::Yield();*/
+	}
 }

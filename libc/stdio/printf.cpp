@@ -3,14 +3,18 @@
 #include <string.h>
 
 #include <carbon/console.h>
+#include <carbon/lock.h>
 
 static char print_buffer[200000] = {0};
+static Spinlock print_lock;
 
 /* Define errno somewhere */
 int errno;
 
+extern "C"
 int printf(const char *fmt, ...)
 {
+	ScopedSpinlock guard {&print_lock};
 	va_list list;
 	va_start(list, fmt);
 	int result = vsnprintf(print_buffer, sizeof(print_buffer), fmt, list);
@@ -21,6 +25,7 @@ int printf(const char *fmt, ...)
 	return result;
 }
 
+extern "C"
 int puts(const char *s)
 {
 	return printf("%s\n", s);

@@ -15,6 +15,9 @@
 #include <carbon/acpi.h>
 #include <carbon/list.h>
 #include <carbon/irq.h>
+#include <carbon/scheduler.h>
+#include <carbon/timer.h>
+#include <carbon/percpu.h>
 
 #include <carbon/x86/msr.h>
 #include <carbon/x86/apic.h>
@@ -281,11 +284,14 @@ static Driver apic_driver("apic");
 
 static Device lapic_device("lapic", &apic_driver);
 
+PER_CPU_VAR(unsigned long apic_ticks) = 0;
+
 bool Lapic::ApicTimerIrqEntry(Irq::IrqContext& context)
 {
-	auto cpu = GetPerCpu();
+	add_per_cpu(apic_ticks, 1);
 
-	cpu->apic_ticks++;
+	Scheduler::OnTick();
+	Timer::HandlePendingTimerEvents();
 
 	return true;
 }
@@ -346,11 +352,9 @@ Gsi MapDestGsiToSrc(Gsi dest_gsi)
 	return dest_gsi;
 }
 
-
+PER_CPU_VAR(Lapic *cpu_lapic) = nullptr;
 void SetupLapic()
 {
-	auto cpu = GetPerCpu();
-
 	unsigned long address = rdmsr(IA32_APIC_BASE_MSR);
 	address &= ~(PAGE_SIZE - 1);
 
@@ -372,15 +376,13 @@ void SetupLapic()
 
 	this_lapic->Write(LAPIC_TSKPRI, 0);
 
-	cpu->lapic = this_lapic;
+	write_per_cpu(cpu_lapic, this_lapic);
 
 	this_lapic->SetupTimer();
 }
 
 void EarlyInit()
 {
-	assert(SetupPerCpuStruct() != nullptr);
-
 	auto ioapic_base = (volatile char *) Vm::MmioMap(&kernel_address_space,
 			IOAPIC_BASE_PHYS, 0, PAGE_SIZE, VM_PROT_WRITE);
 
@@ -411,9 +413,7 @@ void Init()
 extern "C"
 void platform_send_eoi()
 {
-	auto cpu = GetPerCpu();
-
-	cpu->lapic->SendEoi();
+	get_per_cpu(cpu_lapic)->SendEoi();
 }
 
 extern "C"

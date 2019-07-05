@@ -36,7 +36,7 @@ static void write_byte(char c, struct serial_port *port)
 		write_byte('\r', port);
 }
 
-static void serial_write(const char *s, size_t size, struct serial_port *port)
+void serial_write(const char *s, size_t size, struct serial_port *port)
 {
 	for(size_t i = 0; i < size; i++)
 	{

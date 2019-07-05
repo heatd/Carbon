@@ -4,9 +4,14 @@
 * check LICENSE at the root directory for more information
 */
 #include <carbon/lock.h>
+#include <carbon/scheduler.h>
+#ifdef __x86_64__
+#include <carbon/x86/eflags.h>
+#endif
 
 void spin_lock(struct spinlock *lock)
 {
+	Scheduler::DisablePreemption();
 	while(__sync_lock_test_and_set(&lock->lock, 1))
 	{
 		while(lock->lock == 1)
@@ -14,9 +19,24 @@ void spin_lock(struct spinlock *lock)
 	}
 }
 
+void spin_lock_irqsave(struct spinlock *lock)
+{
+	lock->old_flags = irq_save_and_disable();
+	spin_lock(lock);
+}
+
 void spin_unlock(struct spinlock *lock)
 {
 	__sync_lock_release(&lock->lock);
+
+	Scheduler::EnablePreemption();
+}
+
+void spin_unlock_irqrestore(struct spinlock *lock)
+{
+	unsigned long f = lock->old_flags;
+	spin_unlock(lock);
+	irq_restore(f);
 }
 
 Spinlock::~Spinlock()
@@ -29,9 +49,19 @@ void Spinlock::Lock()
 	spin_lock(&lock);
 }
 
+void Spinlock::LockIrqsave()
+{
+	spin_lock_irqsave(&lock);
+}
+
 void Spinlock::Unlock()
 {
 	spin_unlock(&lock);
+}
+
+void Spinlock::UnlockIrqrestore()
+{
+	spin_unlock_irqrestore(&lock);
 }
 
 bool Spinlock::IsLocked()
