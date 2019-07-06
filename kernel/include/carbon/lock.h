@@ -15,17 +15,24 @@ struct spinlock
 	unsigned long old_flags;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void spin_lock(struct spinlock *lock);
 void spin_lock_irqsave(struct spinlock *lock);
 void spin_unlock(struct spinlock *lock);
 void spin_unlock_irqrestore(struct spinlock *lock);
+
+#ifdef __cplusplus
+}
 
 class Spinlock
 {
 private:
 	struct spinlock lock;
 public:
-	Spinlock(){};
+	constexpr Spinlock() : lock {0, 0} {};
 	~Spinlock();
 	void Lock();
 	void LockIrqsave();
@@ -73,5 +80,7 @@ public:
 
 using ScopedSpinlock = ScopedLock<Spinlock>;
 using ScopedSpinlockIrqsave = ScopedLock<Spinlock, true>;
+
+#endif
 
 #endif

@@ -39,6 +39,7 @@ struct thread
 	int thread_errno;
 	unsigned char *fpu_area;
 	struct thread *prev, *next;
+	struct thread *wait_prev, *wait_next;
 #ifdef __x86_64__
 	unsigned long fs;
 	unsigned long gs;
@@ -84,7 +85,63 @@ void Sleep(ClockSource::ClockTicks ticks);
 
 void SetupCpu(unsigned int cpu);
 
+void UnblockThread(struct thread *thread);
+
+void Block(struct thread *t);
+
 extern struct thread *current_thread;
+
+template <typename T>
+void EnqueueThread(T *s, struct thread *thread)
+{
+	if(!s->head)
+	{
+		s->head = s->tail = thread;
+		thread->wait_prev = thread->wait_next = NULL;
+	}
+	else
+	{
+		s->tail->wait_next = thread;
+		thread->wait_prev = s->tail;
+		s->tail = thread;
+		thread->wait_next = NULL;
+	}
+}
+
+template <typename T>
+void DequeueThread(T *s, struct thread *thread)
+{
+	if(s->head == thread)
+	{
+		s->head = thread->wait_next;
+		if(thread->wait_next)
+		{
+			thread->wait_next->wait_prev = NULL;
+		}
+
+	}
+	else
+	{
+		thread->wait_prev->wait_next = thread->wait_next;
+		if(thread->wait_next)
+		{
+			thread->wait_next->wait_prev = thread->wait_prev;
+		}
+		else
+		{
+			s->tail = thread->wait_prev;
+		}
+	}
+
+	if(s->tail == thread)
+	{
+		s->tail = NULL;
+	}
+
+
+	thread->wait_next = thread->wait_prev = NULL;
+}
+
 }
 
 using Scheduler::thread;
@@ -99,6 +156,14 @@ inline struct thread *get_current_thread()
 inline struct thread *get_current_for_cpu(unsigned int cpu)
 {
 	return other_cpu_get(Scheduler::current_thread, cpu);
+}
+
+namespace Scheduler
+{
+	inline void SetCurrentState(unsigned int state)
+	{
+		get_current_thread()->status = state;
+	}
 }
 
 #endif

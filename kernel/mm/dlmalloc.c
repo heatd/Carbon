@@ -533,6 +533,7 @@ void kasan_set_state(unsigned long *ptr, unsigned long size, int state);
 #endif
 
 #ifdef __onyx__
+
 #define LACKS_FCNTL_H 1
 #define LACKS_STRINGS_H 1
 #define LACKS_SCHED_H 1
@@ -547,6 +548,9 @@ void kasan_set_state(unsigned long *ptr, unsigned long size, int state);
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #include <carbon/panic.h>
+#include <carbon/lock.h>
+
+#define USE_LOCKS 2
 #define ABORT panic("abort: dlmalloc error at "TOSTRING(__LINE__)"!")
 #endif
 #endif /*__onyx*/
@@ -1838,6 +1842,25 @@ static FORCEINLINE int win32munmap(void* ptr, size_t size) {
 /* #define RELEASE_LOCK(lk)  ... */
 /* #define TRY_LOCK(lk) ... */
 /* static MLOCK_T malloc_global_mutex = ... */
+
+static inline int spin_lock_wrapper(struct spinlock *spl)
+{
+  spin_lock(spl);
+  return 0;
+}
+
+static inline int spin_unlock_wrapper(struct spinlock *spl)
+{
+  spin_unlock(spl);
+  return 0;
+}
+
+#define MLOCK_T   struct spinlock
+#define INITIAL_LOCK(lk)  ((lk)->lock = 0)
+#define DESTROY_LOCK(lk)  (0)
+#define ACQUIRE_LOCK(lk)  spin_lock_wrapper(lk)
+#define RELEASE_LOCK(lk)  spin_unlock_wrapper(lk)
+static MLOCK_T malloc_global_mutex = {0};
 
 #elif USE_SPIN_LOCKS
 

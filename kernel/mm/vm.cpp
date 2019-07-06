@@ -181,7 +181,10 @@ int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
 		assert(p != nullptr);
 
 		if(!map_phys_to_virt(start + off, (unsigned long) p->paddr, region->perms))
+		{
+			region->vmo->lock.Unlock();
 			return -1;
+		}
 
 		off += PAGE_SIZE;
 		region->vmo->lock.Unlock();

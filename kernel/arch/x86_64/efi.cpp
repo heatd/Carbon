@@ -267,8 +267,7 @@ void thread_test(void *context)
 {
 	while(true)
 	{
-		printf("Thread1\n");
-		Scheduler::Yield();
+		Scheduler::Block(get_current_thread());
 	}
 }
 
@@ -336,13 +335,5 @@ extern "C" void efi_entry(struct boot_info *info)
 
 	Smp::BootCpus();
 
-	/* struct thread *thread = Scheduler::CreateThread(thread_test, nullptr, Scheduler::CREATE_THREAD_KERNEL);
-
-	Scheduler::StartThread(thread);*/
-
-	while(1)
-	{
-		/* printf("Thread0\n");
-		Scheduler::Yield();*/
-	}
+	Scheduler::Block(get_current_thread());
 }

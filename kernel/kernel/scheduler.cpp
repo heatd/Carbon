@@ -16,6 +16,8 @@
 #include <carbon/percpu.h>
 #include <carbon/smp.h>
 #include <carbon/fpu.h>
+#include <carbon/mutex.h>
+#include <carbon/x86/eflags.h>
 
 extern struct serial_port com1;
 void serial_write(const char *s, size_t size, struct serial_port *port);
@@ -353,16 +355,35 @@ void Block(struct thread *t)
 	Yield();
 }
 
+void UnblockThread(struct thread *thread)
+{
+	ScopedSpinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
+
+	auto cpu = thread->cpu;
+
+	if(thread->status != THREAD_BLOCKED)
+		return;
+
+	thread->status = THREAD_RUNNABLE;
+
+	if(get_current_for_cpu(cpu) == thread)
+	{
+		/* Just set thread->status and return */
+		return;
+	}
+	else
+	{
+		AppendThreadToQueue(thread, thread->priority);
+	}
+}
+
 void Sleep(ClockSource::ClockTicks ticks)
 {
 	auto thread = get_current_thread();
 	Timer::TimerEvent wake_event(ticks, [] (void *context)
 	{
 		struct thread *thread = (struct thread *) context;
-		ScopedSpinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
-
-		thread->status = THREAD_RUNNABLE;
-		AppendThreadToQueue(thread, thread->priority);
+		UnblockThread(thread);
 	}
 	, (void *) thread, true);
 
@@ -386,3 +407,132 @@ void SetupCpu(unsigned int cpu)
 }
 
 }
+void mutex_lock_slow_path(struct mutex *mutex)
+{
+	spin_lock(&mutex->llock);
+
+	Scheduler::SetCurrentState(THREAD_BLOCKED);
+
+	while(!__sync_bool_compare_and_swap(&mutex->counter, 0, 1))
+	{
+		struct thread *thread = get_current_thread();
+
+		Scheduler::EnqueueThread(mutex, thread);
+		
+		spin_unlock(&mutex->llock);
+
+		Scheduler::Yield();
+
+		spin_lock(&mutex->llock);
+
+		Scheduler::SetCurrentState(THREAD_BLOCKED);
+	}
+
+	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+
+	spin_unlock(&mutex->llock);
+
+	__sync_synchronize();
+}
+
+void mutex_lock(struct mutex *mtx)
+{
+	if(!__sync_bool_compare_and_swap(&mtx->counter, 0, 1))
+		mutex_lock_slow_path(mtx);
+
+	__sync_synchronize();
+	mtx->owner = get_current_thread();
+}
+
+void mutex_unlock(struct mutex *mtx)
+{
+	mtx->owner = nullptr;
+	__sync_bool_compare_and_swap(&mtx->counter, 1, 0);
+	__sync_synchronize();
+
+	spin_lock(&mtx->llock);
+
+	if(mtx->head)
+	{
+		struct thread *t = mtx->head;
+		Scheduler::DequeueThread(mtx, mtx->head);
+
+		Scheduler::UnblockThread(t);
+	}
+
+	spin_unlock(&mtx->llock);
+}
+
+#ifdef MUTEX_TEST
+struct mutex mtx = {};
+
+void mtx_thread2(void *c)
+{
+	unsigned int cpu = (unsigned int) (unsigned long) c;
+
+	while(true)
+	{
+		mutex_lock(&mtx);
+		printf("thread%u\n", cpu);
+		mutex_unlock(&mtx);
+	}
+}
+
+thread *threads[4];
+void mtx_test()
+{
+	for(unsigned int i = 1; i < Smp::GetOnlineCpus(); i++)
+	{
+		printf("create thread %u\n", i);
+		auto t = Scheduler::CreateThread(mtx_thread2, (void *) (unsigned long) i,
+					 Scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
+		threads[i] = t;
+		Scheduler::StartThread(t, i);
+	}
+
+	while(true)
+	{
+		mutex_lock(&mtx);
+		printf("thread0\n");
+		mutex_unlock(&mtx);
+	}
+}
+
+#endif
+
+#ifdef WAITQUEUE_TEST
+#include <carbon/wait_queue.h>
+
+thread *threads[4];
+WaitQueue wq;
+
+void wq_thread(void *context)
+{
+	auto cpu = (unsigned int) (unsigned long) context;
+
+	wq.AcquireLock();
+	while(true)
+	{
+		wq.Wait();
+		printf("cpu%u woke up\n", cpu);
+	}
+}
+
+void wq_test()
+{
+	for(unsigned int i = 1; i < Smp::GetOnlineCpus(); i++)
+	{
+		printf("create thread %u\n", i);
+		auto t = Scheduler::CreateThread(wq_thread, (void *) (unsigned long) i,
+					 Scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
+		threads[i] = t;
+		Scheduler::StartThread(t, i);
+	}
+
+	while(true)
+	{
+		wq.WakeUpAll();
+	}
+}
+
+#endif

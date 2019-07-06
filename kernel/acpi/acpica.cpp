@@ -158,9 +158,8 @@ void AcpiOsReleaseMutex(ACPI_MUTEX Handle)
 extern "C"
 ACPI_STATUS AcpiOsCreateSemaphore(UINT32 MaxUnits, UINT32 InitialUnits, ACPI_SEMAPHORE * OutHandle)
 {
-	*OutHandle = (struct spinlock *) AcpiOsAllocate(sizeof(struct spinlock));
+	*OutHandle = (struct spinlock *) AcpiOsAllocateZeroed(sizeof(struct spinlock));
 	if(*OutHandle == NULL) return AE_NO_MEMORY;
-	memset(*OutHandle, 0, sizeof(struct spinlock));
 	return AE_OK;
 }
 
@@ -174,21 +173,22 @@ ACPI_STATUS AcpiOsDeleteSemaphore(ACPI_SEMAPHORE Handle)
 extern "C"
 ACPI_STATUS AcpiOsWaitSemaphore(ACPI_SEMAPHORE Handle, UINT32 Units, UINT16 Timeout)
 {
+	panic("todo");
 	return AE_OK;
 }
 
 extern "C"
 ACPI_STATUS AcpiOsSignalSemaphore(ACPI_SEMAPHORE Handle, UINT32 Units)
 {
+	panic("todo");
 	return AE_OK;
 }
 
 extern "C"
 ACPI_STATUS AcpiOsCreateLock(ACPI_SPINLOCK *OutHandle)
 {
-	*OutHandle = (struct spinlock *) AcpiOsAllocate(sizeof(struct spinlock));
+	*OutHandle = (struct spinlock *) AcpiOsAllocateZeroed(sizeof(struct spinlock));
 	if(*OutHandle == NULL) return AE_NO_MEMORY;
-	memset(*OutHandle, 0, sizeof(struct spinlock));
 	return AE_OK;
 }
 
