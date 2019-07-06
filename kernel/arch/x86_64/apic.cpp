@@ -18,6 +18,8 @@
 #include <carbon/scheduler.h>
 #include <carbon/timer.h>
 #include <carbon/percpu.h>
+#include <carbon/smp.h>
+#include <carbon/clocksource.h>
 
 #include <carbon/x86/msr.h>
 #include <carbon/x86/apic.h>
@@ -31,6 +33,7 @@ namespace x86
 namespace Apic
 {
 
+PER_CPU_VAR(Lapic *cpu_lapic) = nullptr;
 Spinlock apic_list_lock;
 LinkedList<IoApic *> apic_list;
 
@@ -157,6 +160,8 @@ IoApic* GsiToApic(Gsi gsi)
 	return nullptr;
 }
 
+static unsigned int nr_cpus = 0;
+static UINT8 *lapic_ids = nullptr;
 void ParseMadt()
 {
 	auto madt = Acpi::GetMadt();
@@ -178,6 +183,7 @@ void ParseMadt()
 			printf("Address: %x\n", apic->Address);
 			printf("GSI base: %x\n", apic->GlobalIrqBase);
 		}
+
 		if(it->Type == AcpiMadtType::ACPI_MADT_TYPE_INTERRUPT_OVERRIDE)
 		{
 			ACPI_MADT_INTERRUPT_OVERRIDE *mio = (ACPI_MADT_INTERRUPT_OVERRIDE *) it;
@@ -209,8 +215,24 @@ void ParseMadt()
 
 			apic->WriteRedirectionEntry(pin, redirection_entry);
 		}
+
+		if(it->Type == AcpiMadtType::ACPI_MADT_TYPE_LOCAL_APIC)
+		{
+			ACPI_MADT_LOCAL_APIC *la = (ACPI_MADT_LOCAL_APIC *) it;
+			
+			lapic_ids = (UINT8 *) realloc(lapic_ids, (nr_cpus + 1) * sizeof(UINT8));
+
+			assert(lapic_ids != nullptr);
+
+			lapic_ids[nr_cpus] = la->Id;
+			++nr_cpus;
+		}
 	}
+
+	Smp::SetNumberOfCpus(nr_cpus);
 	
+	/* Set the boot CPU as online */
+	Smp::SetOnline(0);
 }
 
 void Lapic::Write(uint32_t reg, uint32_t value)
@@ -291,9 +313,17 @@ bool Lapic::ApicTimerIrqEntry(Irq::IrqContext& context)
 	add_per_cpu(apic_ticks, 1);
 
 	Scheduler::OnTick();
-	Timer::HandlePendingTimerEvents();
+
+	if(get_cpu_nr() == 0)
+		Timer::HandlePendingTimerEvents();
 
 	return true;
+}
+
+void Lapic::DoCalibration()
+{
+	if(!CalibrateWithAcpiTimer())
+		CalibrateWithPit();
 }
 
 void Lapic::SetupTimer()
@@ -301,13 +331,23 @@ void Lapic::SetupTimer()
 	/* Set the timer divisor to 16 */
 	Write(LAPIC_TIMER_DIV, 3);
 
-	if(!CalibrateWithAcpiTimer())
-		CalibrateWithPit();
+	/* cpu0 needs to calibrate, the others just steal the calibration data from it */
+	if(get_cpu_nr() == 0)
+	{
+		DoCalibration();
+	}
+	else
+	{
+		auto lapic = other_cpu_get(cpu_lapic, 0);
+		ticks_in_10ms = lapic->ticks_in_10ms;
+		calibration_end_tsc = lapic->calibration_end_tsc;
+		calibration_init_tsc = lapic->calibration_init_tsc;
+	}
 
 	
 	apic_rate = ticks_in_10ms / 10;
-
-	printf("Apic rate: %lu\n", apic_rate);
+	
+	if(get_cpu_nr() == 0) printf("Apic rate: %lu\n", apic_rate);
 
 	auto ioapic = GsiToApic(2);
 	auto vector = ioapic->GetInterruptBase() + 2;
@@ -317,11 +357,24 @@ void Lapic::SetupTimer()
 	Write(LAPIC_LVT_TIMER, vector | LAPIC_LVT_TIMER_MODE_PERIODIC);
 	Write(LAPIC_TIMER_INITCNT, apic_rate);
 	
-	handler = new Irq::IrqHandler(&lapic_device, &apic_driver, ApicTimerIrqEntry, 2, this);
+	/* only cpu0 needs to install the irq handler */
+	if(get_cpu_nr() == 0)
+	{
+		handler = new Irq::IrqHandler(&lapic_device, &apic_driver, ApicTimerIrqEntry, 2, this);
+		Irq::InstallIrq(handler);
+	}
 
-	Irq::InstallIrq(handler);
 	Cpu::EnableInterrupts();
 }
+
+void Lapic::SendSIPI(uint8_t id, IcrDeliveryMode mode, uint32_t page)
+{
+	Write(LAPIC_IPIID, (uint32_t) id << 24);
+	uint64_t icr = mode << 8 | (page & 0xff);
+	icr |= (1 << 14);
+	Write(LAPIC_ICR, (uint32_t) icr);
+}
+
 
 Gsi MapSourceGsiToDest(Gsi source_gsi)
 {
@@ -352,7 +405,6 @@ Gsi MapDestGsiToSrc(Gsi dest_gsi)
 	return dest_gsi;
 }
 
-PER_CPU_VAR(Lapic *cpu_lapic) = nullptr;
 void SetupLapic()
 {
 	unsigned long address = rdmsr(IA32_APIC_BASE_MSR);
@@ -428,3 +480,93 @@ void handle_signal()
 
 }
 }
+
+unsigned long Time::GetTicks()
+{
+	return get_per_cpu(x86::Apic::apic_ticks);
+}
+
+struct smp_header
+{
+	volatile unsigned long thread_stack;
+	volatile unsigned long gs_base;
+	volatile unsigned long boot_done;
+} __attribute__((packed));
+
+extern struct smp_header smpboot_header;
+extern unsigned char _start_smp;
+
+namespace Smp
+{
+
+constexpr unsigned long boot_done_timeout = 1000;
+
+bool WaitForDone(struct smp_header *s)
+{
+	unsigned long t = Time::GetTicks();
+
+	while(Time::GetTicks() - t < 1000)
+	{
+		if(s->boot_done)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void Boot(unsigned int cpu)
+{
+	printf("smpboot: booting cpu%u\n", cpu);
+	/* Get the actual header through some sneaky math header */
+	unsigned long start_smp = (unsigned long) &_start_smp;
+	unsigned long smpboot_header_start = (unsigned long) &smpboot_header;
+
+	unsigned long off = smpboot_header_start - start_smp;
+
+	unsigned long actual_smpboot_header = PHYS_BASE + off;
+
+	struct smp_header *s = (struct smp_header *) actual_smpboot_header;
+
+	s->gs_base = Percpu::InitForCpu(cpu);
+
+	other_cpu_write(Smp::cpu_nr, cpu, cpu);
+
+	Scheduler::SetupCpu(cpu);
+
+	s->thread_stack = (volatile unsigned long) get_current_for_cpu(cpu)->kernel_stack_top;
+	s->boot_done = false;
+
+	get_per_cpu(x86::Apic::cpu_lapic)->SendSIPI(x86::Apic::lapic_ids[cpu],
+						    x86::Apic::IcrDeliveryMode::INIT, 0);
+	
+	/* Do a 10ms sleep */
+	Scheduler::Sleep(10);
+
+
+	get_per_cpu(x86::Apic::cpu_lapic)->SendSIPI(x86::Apic::lapic_ids[cpu],
+						    x86::Apic::IcrDeliveryMode::SIPI, 0);
+	
+	if(WaitForDone(s))
+	{
+		goto out;
+	}
+
+	/* Try for a second time */
+	get_per_cpu(x86::Apic::cpu_lapic)->SendSIPI(x86::Apic::lapic_ids[cpu],
+						    x86::Apic::IcrDeliveryMode::SIPI, 0);
+	
+	if(WaitForDone(s))
+		goto out;
+	else
+	{
+		printf("smpboot: Failed to start cpu%u\n", cpu);
+		return;
+	}
+out:
+	s->boot_done = false;
+	Smp::SetOnline(cpu);
+}
+
+};

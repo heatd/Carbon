@@ -10,6 +10,10 @@
 #include <carbon/panic.h>
 #include <carbon/vm.h>
 
+#include <carbon/fpu.h>
+#include <carbon/x86/tss.h>
+PER_CPU_VAR(unsigned long kernel_stack) = 0;
+
 namespace Scheduler
 {
 
@@ -66,6 +70,22 @@ bool ArchCreateThreadLowLevel(struct thread *thread, struct registers *regs)
 	thread->kernel_stack = (unsigned long *) stack_regs;
 
 	return true;
+}
+
+void ArchSaveThread(struct thread *thread)
+{
+	if(!(thread->flags & THREAD_FLAG_KERNEL))
+		Fpu::SaveFpu(thread->fpu_area);
+}
+
+void ArchLoadThread(struct thread *thread)
+{
+	write_per_cpu(kernel_stack, (unsigned long) thread->kernel_stack_top);
+
+	Tss::SetKernelStack((unsigned long) thread->kernel_stack_top);
+
+	if(!(thread->flags & THREAD_FLAG_KERNEL))
+		Fpu::RestoreFpu(thread->fpu_area);
 }
 
 };

@@ -77,5 +77,5 @@ qemu: iso
 	-s -cdrom Carbon.iso -m 512M \
 	-monitor stdio -boot d -netdev user,id=u1 -device e1000,netdev=u1 \
 	-object filter-dump,id=f1,netdev=u1,file=net.pcap \
-	--enable-kvm -smp cores=2,sockets=2 -cpu host,migratable=no -d int -vga std \
+	-smp cores=2,sockets=2 -d int -vga std -enable-kvm -cpu host,migratable=no \
 	-bios OVMF.fd -usb -no-reboot -no-shutdown

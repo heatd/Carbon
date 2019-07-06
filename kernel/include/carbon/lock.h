@@ -25,7 +25,7 @@ class Spinlock
 private:
 	struct spinlock lock;
 public:
-	Spinlock() : lock({0, 0}){};
+	Spinlock(){};
 	~Spinlock();
 	void Lock();
 	void LockIrqsave();

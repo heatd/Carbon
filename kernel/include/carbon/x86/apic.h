@@ -87,6 +87,16 @@ public:
 	}
 };
 
+enum IcrDeliveryMode : uint32_t
+{
+	NORMAL = 0,
+	LOWEST,
+	SMI,
+	NMI = 4,
+	INIT = 5,
+	SIPI = 6
+};
+
 class Lapic
 {
 private:
@@ -101,6 +111,7 @@ private:
 	void CalibrationEnd();
 	bool CalibrateWithAcpiTimer();
 	void CalibrateWithPit();
+	void DoCalibration();
 	static bool ApicTimerIrqEntry(Irq::IrqContext& context);
 public:
 	Lapic(volatile uint32_t *lapic_base) : lapic_base(lapic_base) {}
@@ -115,6 +126,7 @@ public:
 	}
 
 	void SetupTimer();
+	void SendSIPI(uint8_t id, IcrDeliveryMode mode, uint32_t page);
 };
 
 constexpr unsigned int NumPins = 24;
@@ -124,6 +136,7 @@ IoApic* GsiToApic(Gsi gsi);
 Gsi MapSourceGsiToDest(Gsi source_gsi);
 Gsi MapDestGsiToSrc(Gsi dest_gsi);
 void Init();
+void SetupLapic();
 
 }
 

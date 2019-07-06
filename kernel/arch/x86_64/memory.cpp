@@ -200,7 +200,7 @@ void x86_setup_placement_mappings(void)
 
 void x86_setup_early_physical_mappings(void)
 {
-	/* Get the current PML4 and store it */
+	/* Get the current PML and store it */
 	__asm__ __volatile__("movq %%cr3, %%rax\t\nmovq %%rax, %0":"=r"(boot_pml4));
 
 	boot_x86_address_space.pml = boot_pml4;
@@ -465,4 +465,61 @@ void unmap_page_range(void *as, void *addr, size_t len)
 	}
 
 	flush_tlb(addr, size_to_pages(len));
+}
+
+extern char _text_start;
+extern char _text_end;
+extern char _data_start;
+extern char _data_end;
+extern char _vdso_sect_start;
+extern char _vdso_sect_end;
+extern char VIRT_BASE;
+extern struct address_space kernel_address_space;
+
+void map_phys_to_virt_pgs(unsigned long start, unsigned long pstart, size_t size, unsigned long prot)
+{
+	size_t pages = size >> PAGE_SHIFT;
+
+	for(size_t i = 0; i < pages; i++)
+	{
+		map_phys_to_virt(start, pstart, prot);
+		start += PAGE_SIZE;
+		pstart += PAGE_SIZE;
+	}
+}
+
+void paging_protect_kernel(void)
+{
+	PML *original_pml = boot_pml4;
+	PML *pml;
+	struct page *pa = alloc_pages(1, 0);
+	assert(pa != nullptr);
+	pml = (PML *) pa->paddr;
+	boot_pml4 = pml;
+
+	uintptr_t text_start = (uintptr_t) &_text_start;
+	uintptr_t data_start = (uintptr_t) &_data_start;
+	uintptr_t vdso_start = (uintptr_t) &_vdso_sect_start;
+
+	memcpy((PML*)((uintptr_t) pml + PHYS_BASE), (PML*)((uintptr_t) original_pml + PHYS_BASE),
+		sizeof(PML));
+	PML *p = (PML*)((uintptr_t) pml + PHYS_BASE);
+	p->entries[511] = 0UL;
+	p->entries[0] = 0UL;
+
+	boot_x86_address_space.pml = pml;
+
+	size_t size = (uintptr_t) &_text_end - text_start;
+	map_phys_to_virt_pgs(text_start, (text_start - base_address),
+		size, VM_PROT_EXEC);
+
+	size = (uintptr_t) &_data_end - data_start;
+	map_phys_to_virt_pgs(data_start, (data_start - base_address),
+		size, VM_PROT_WRITE);
+	
+	size = (uintptr_t) &_vdso_sect_end - vdso_start;
+	map_phys_to_virt_pgs(vdso_start, (vdso_start - base_address),
+		size, VM_PROT_WRITE);
+
+	__asm__ __volatile__("movq %0, %%cr3"::"r"(pml));
 }

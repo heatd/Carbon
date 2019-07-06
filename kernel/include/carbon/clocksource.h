@@ -29,5 +29,11 @@ public:
 	virtual ClockNs GetElapsed(ClockTicks first, ClockTicks last) = 0;
 };
 
+namespace Time
+{
+
+unsigned long GetTicks();
+
+};
 
 #endif

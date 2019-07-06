@@ -114,6 +114,7 @@ void page_fault_handler(intctx_t *ctx)
 	else
 		return;
 
+	printf("rbp: %lx\n", ctx->rbp);
 	panic("Page fault");
 }
 

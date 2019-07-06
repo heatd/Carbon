@@ -17,6 +17,17 @@ namespace Percpu
 {
 
 PER_CPU_VAR(unsigned long __cpu_base) = 0;
+unsigned long *percpu_bases = nullptr;
+unsigned long nr_bases = 0;
+
+void AddPercpu(unsigned long base)
+{
+	nr_bases++;
+	percpu_bases = (unsigned long *) realloc((unsigned long *) percpu_bases,
+						 nr_bases * sizeof(unsigned long));
+	assert(percpu_bases != nullptr);
+	percpu_bases[nr_bases - 1] = base;
+}
 
 void Init()
 {
@@ -33,6 +44,22 @@ void Init()
 	write_per_cpu(__cpu_base, (unsigned long) buffer);
 
 	assert(get_per_cpu(__cpu_base) == (unsigned long) buffer);
+
+	AddPercpu((unsigned long) buffer);
+}
+
+unsigned long InitForCpu(unsigned int cpu)
+{
+	size_t percpu_size = (unsigned long) &__percpu_end - (unsigned long) &__percpu_start;
+
+	void *buffer = zalloc(percpu_size);
+	assert(buffer != nullptr);
+
+	AddPercpu((unsigned long) buffer);
+
+	other_cpu_write(__cpu_base, (unsigned long) buffer, cpu);
+
+	return (unsigned long) buffer;
 }
 
 }

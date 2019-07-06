@@ -25,6 +25,10 @@
 #include <carbon/list.h>
 #include <carbon/scheduler.h>
 #include <carbon/cpu.h>
+#include <carbon/smp.h>
+
+#include <carbon/fpu.h>
+#include <carbon/x86/gdt.h>
 
 struct boot_info *boot_info = NULL;
 
@@ -268,6 +272,9 @@ void thread_test(void *context)
 	}
 }
 
+void paging_protect_kernel(void);
+
+extern "C" uint64_t bsp_gdt;
 extern "C" void efi_entry(struct boot_info *info)
 {
 	x86_serial_init();
@@ -297,6 +304,9 @@ extern "C" void efi_entry(struct boot_info *info)
 	printf("carbon: Starting kernel.\n");
 
 	efi_setup_physical_memory(info);
+	
+	paging_protect_kernel();
+
 
 	x86_init_exceptions();
 
@@ -314,17 +324,21 @@ extern "C" void efi_entry(struct boot_info *info)
 
 	Percpu::Init();
 
+	Gdt::InitPercpu();
+
+	Fpu::Init();
+
 	Scheduler::Initialize();
 
 	Acpi::Init();
 
 	x86::Apic::Init();
 
-#if 0
-	struct thread *thread = Scheduler::CreateThread(thread_test, nullptr, Scheduler::CREATE_THREAD_KERNEL);
+	Smp::BootCpus();
 
-	Scheduler::StartThread(thread);
-#endif
+	/* struct thread *thread = Scheduler::CreateThread(thread_test, nullptr, Scheduler::CREATE_THREAD_KERNEL);
+
+	Scheduler::StartThread(thread);*/
 
 	while(1)
 	{

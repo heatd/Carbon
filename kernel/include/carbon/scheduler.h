@@ -52,17 +52,22 @@ using ThreadCallback = void (*)(void *context);
 
 enum CreateThreadFlags : unsigned int
 {
-	CREATE_THREAD_KERNEL = (1 << 0)
+	CREATE_THREAD_KERNEL = THREAD_FLAG_KERNEL
 };
 
 struct thread *CreateThread(ThreadCallback callback, void *context,
 			    CreateThreadFlags flags);
 struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags);
-void StartThread(struct thread *thread);
+void StartThread(struct thread *thread, unsigned int cpu = -1);
 
 bool ArchCreateThread(struct thread *thread, ThreadCallback callback,
 		      void *context, CreateThreadFlags flags);
 bool ArchCreateThreadLowLevel(struct thread *thread, struct registers *regs);
+
+
+void ArchLoadThread(struct thread *thread);
+
+void ArchSaveThread(struct thread *thread);
 
 void OnTick();
 
@@ -77,6 +82,8 @@ void Yield();
 
 void Sleep(ClockSource::ClockTicks ticks);
 
+void SetupCpu(unsigned int cpu);
+
 extern struct thread *current_thread;
 }
 
@@ -87,6 +94,11 @@ using Scheduler::thread;
 inline struct thread *get_current_thread()
 {
 	return get_per_cpu(Scheduler::current_thread);
+}
+
+inline struct thread *get_current_for_cpu(unsigned int cpu)
+{
+	return other_cpu_get(Scheduler::current_thread, cpu);
 }
 
 #endif

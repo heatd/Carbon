@@ -12,10 +12,13 @@ extern char kernel_end[0];
 
 extern uintptr_t base_address;
 
+static unsigned long base = 0;
 
 uintptr_t get_kernel_base_address(void)
 {
-	return base_address;
+	if(unlikely(!base))
+		base = base_address;
+	return base;
 }
 
 void get_kernel_limits(struct kernel_limits *l)

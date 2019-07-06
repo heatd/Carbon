@@ -6,10 +6,11 @@
 #ifndef _CARBON_PERCPU_H
 #define _CARBON_PERCPU_H
 
-#define PER_CPU_VAR(var) __attribute__((section(".percpu"), used))	var
+#include <carbon/compiler.h>
 
-#define __STRINGIFY(x) #x
-#define STRINGIFY(x) __STRINGIFY(x)
+unsigned int get_cpu_nr();
+
+#define PER_CPU_VAR(var) __attribute__((section(".percpu"), used))	var
 
 #define get_per_cpu(var) 			\
 ({						\
@@ -117,9 +118,33 @@ namespace Percpu
 {
 
 extern unsigned long __cpu_base;
+extern unsigned long *percpu_bases;
 void Init();
+unsigned long InitForCpu(unsigned int cpu);
 
 };
+
+#define other_cpu_get_ptr(var, cpu)		((decltype(var) *) (Percpu::percpu_bases[cpu] + (unsigned long) &var))
+#define other_cpu_get(var, cpu)			*other_cpu_get_ptr(var, cpu)
+#define other_cpu_write(var, val, cpu)		*other_cpu_get_ptr(var, cpu) = val
+#define other_cpu_add(var, val, cpu)		*other_cpu_get_ptr(var, cpu) += val
+
+#define get_per_cpu_ptr_any(var, cpu)	(cpu == get_cpu_nr() ? get_per_cpu_ptr(var) : other_cpu_get_ptr(var, cpu))
+#define get_per_cpu_any(var, cpu)	(cpu == get_cpu_nr() ? get_per_cpu(var) : other_cpu_get(var, cpu))
+
+#define write_per_cpu_any(var, val, cpu)			\
+do {								\
+if(cpu == get_cpu_nr())						\
+	write_per_cpu(var, val); 				\
+else other_cpu_write(var, val, cpu);				\
+} while(0)
+
+#define add_per_cpu_any(var, val, cpu)		\
+do {						\
+if(cpu == get_cpu_nr())				\
+	add_per_cpu(var, val); 			\
+else other_cpu_add(var, val, cpu);		\
+} while(0)
 
 #define get_per_cpu_ptr_no_cast(var)								\
 ({											\

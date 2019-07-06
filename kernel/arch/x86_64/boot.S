@@ -33,6 +33,7 @@ pdhigher:
 .global base_address
 base_address: .quad 0xffffffff80000000
 
+.global idt
 idt:
 	.quad 0
 	.word 0
@@ -40,7 +41,9 @@ idt:
 .section .data
 
 .align 16
-gdt_begin: 
+.global bsp_gdt
+bsp_gdt:
+gdt_begin:
         .quad 0x0000000000000000   # 0x0  - NULL segment
         .quad 0x00A09A0000000000   # 0x8  - KERNEL CS
         .quad 0x00A0920000000000   # 0x10 - KERNEL DS
