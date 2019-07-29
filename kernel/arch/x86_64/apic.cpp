@@ -20,6 +20,7 @@
 #include <carbon/percpu.h>
 #include <carbon/smp.h>
 #include <carbon/clocksource.h>
+#include <carbon/vector.h>
 
 #include <carbon/x86/msr.h>
 #include <carbon/x86/apic.h>
@@ -46,7 +47,7 @@ struct InterruptOverride
 };
 
 static size_t nr_overrides = 0;
-static InterruptOverride *overrides = nullptr;
+static vector<InterruptOverride> overrides{};
 
 uint32_t IoApic::Read(uint32_t reg)
 {
@@ -146,7 +147,7 @@ void SetupIsaIrqs()
 
 IoApic* GsiToApic(Gsi gsi)
 {
-	ScopedSpinlock guard{&apic_list_lock};
+	scoped_spinlock guard{&apic_list_lock};
 
 	for(auto apic : apic_list)
 	{
@@ -161,7 +162,7 @@ IoApic* GsiToApic(Gsi gsi)
 }
 
 static unsigned int nr_cpus = 0;
-static UINT8 *lapic_ids = nullptr;
+static vector<UINT8> lapic_ids{};
 void ParseMadt()
 {
 	auto madt = Acpi::GetMadt();
@@ -177,13 +178,6 @@ void ParseMadt()
 	for(auto it = first_subtable; (unsigned long) it < (unsigned long) last;
 		it = (ACPI_SUBTABLE_HEADER *) ((unsigned long) it + it->Length))
 	{
-		if(it->Type == AcpiMadtType::ACPI_MADT_TYPE_IO_APIC)
-		{
-			ACPI_MADT_IO_APIC *apic = (ACPI_MADT_IO_APIC *) it;
-			printf("Address: %x\n", apic->Address);
-			printf("GSI base: %x\n", apic->GlobalIrqBase);
-		}
-
 		if(it->Type == AcpiMadtType::ACPI_MADT_TYPE_INTERRUPT_OVERRIDE)
 		{
 			ACPI_MADT_INTERRUPT_OVERRIDE *mio = (ACPI_MADT_INTERRUPT_OVERRIDE *) it;
@@ -193,17 +187,14 @@ void ParseMadt()
 			bool level = (mio->IntiFlags & ACPI_MADT_TRIGGER_MASK) == ACPI_MADT_TRIGGER_LEVEL;
 
 			nr_overrides++;
-			InterruptOverride *new_overrides = (InterruptOverride *) realloc(overrides,
-						     nr_overrides * sizeof(InterruptOverride));
 			
-			assert(new_overrides != nullptr);
-
-			InterruptOverride& override = new_overrides[nr_overrides - 1];
+			InterruptOverride override;
 			override.source = mio->SourceIrq;
 			override.dest = mio->GlobalIrq;
 			override.active_high = active_high;
 			override.level = level;
-			overrides = new_overrides;
+			
+			assert(overrides.push_back(override) != false);
 
 			auto apic = GsiToApic(override.dest);
 			auto pin = apic->GetPinFromGsi(override.dest);
@@ -220,11 +211,8 @@ void ParseMadt()
 		{
 			ACPI_MADT_LOCAL_APIC *la = (ACPI_MADT_LOCAL_APIC *) it;
 			
-			lapic_ids = (UINT8 *) realloc(lapic_ids, (nr_cpus + 1) * sizeof(UINT8));
+			assert(lapic_ids.push_back(la->Id) != false);
 
-			assert(lapic_ids != nullptr);
-
-			lapic_ids[nr_cpus] = la->Id;
 			++nr_cpus;
 		}
 	}
@@ -378,13 +366,10 @@ void Lapic::SendSIPI(uint8_t id, IcrDeliveryMode mode, uint32_t page)
 
 Gsi MapSourceGsiToDest(Gsi source_gsi)
 {
-	auto override = overrides;
-	for(size_t i = 0; i < nr_overrides; i++)
+	for(auto override : overrides)
 	{
-		if(override->source == source_gsi)
-			return override->dest;
-		
-		override++;
+		if(override.source == source_gsi)
+			return override.dest;
 	}
 
 	return source_gsi;
@@ -519,7 +504,7 @@ bool WaitForDone(struct smp_header *s)
 void Boot(unsigned int cpu)
 {
 	printf("smpboot: booting cpu%u\n", cpu);
-	/* Get the actual header through some sneaky math header */
+	/* Get the actual header through some sneaky math */
 	unsigned long start_smp = (unsigned long) &_start_smp;
 	unsigned long smpboot_header_start = (unsigned long) &smpboot_header;
 
@@ -535,7 +520,7 @@ void Boot(unsigned int cpu)
 
 	Scheduler::SetupCpu(cpu);
 
-	s->thread_stack = (volatile unsigned long) get_current_for_cpu(cpu)->kernel_stack_top;
+	s->thread_stack = (unsigned long) (get_current_for_cpu(cpu)->kernel_stack_top);
 	s->boot_done = false;
 
 	get_per_cpu(x86::Apic::cpu_lapic)->SendSIPI(x86::Apic::lapic_ids[cpu],

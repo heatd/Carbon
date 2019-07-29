@@ -44,13 +44,13 @@ void ReserveInterruptsUnlocked(InterruptVector base, size_t number)
 
 void ReserveInterrupts(InterruptVector base, size_t number)
 {
-	ScopedSpinlock l(&bitmap_lock);
+	scoped_spinlock l(&bitmap_lock);
 	ReserveInterruptsUnlocked(base, number);
 }
 
 InterruptVector AllocateInterrupts(size_t number)
 {
-	ScopedSpinlock l(&bitmap_lock);
+	scoped_spinlock l(&bitmap_lock);
 
 	size_t to_alloc = number;
 	InterruptVector base = 0;
@@ -89,7 +89,7 @@ inline void FreeInterrupt(InterruptVector vector)
 
 void FreeInterrupts(InterruptVector vector, size_t number)
 {
-	ScopedSpinlock l(&bitmap_lock);
+	scoped_spinlock l(&bitmap_lock);
 
 	for(size_t i = 0; i < number; i++)
 		FreeInterrupt(vector + i);

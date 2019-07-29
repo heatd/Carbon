@@ -15,7 +15,7 @@ static Spinlock irq_lock;
 
 bool InstallIrq(IrqHandler *handler)
 {
-	ScopedSpinlock l(&irq_lock);
+	scoped_spinlock l(&irq_lock);
 	IrqLine line = handler->GetLine();
 
 	assert(line < NR_IRQ);
@@ -32,7 +32,7 @@ bool InstallIrq(IrqHandler *handler)
 
 void FreeIrq(IrqHandler *handler)
 {
-	ScopedSpinlock l(&irq_lock);
+	scoped_spinlock l(&irq_lock);
 
 	auto line = handler->GetLine();
 	auto& list = irq_lines[line];

@@ -19,7 +19,9 @@
 
 static struct heap heap = {};
 uintptr_t starting_address = 0;
+Spinlock heap_lock{};
 
+extern "C"
 struct heap *heap_get()
 {
 	return &heap;
@@ -41,12 +43,13 @@ void *expand_heap(size_t size)
 {
 	size_t nr_pages = (size >> PAGE_SHIFT) + 3;
 
-	void *alloc_start = heap.brk;
-	/*printf("hello???\n");
-	printf("Expanding heap from %p to %lx\n", heap.brk, (unsigned long) alloc_start + nr_pages << PAGE_SHIFT);*/
+	void *alloc_start = (void *) ((char *) heap.starting_address + heap.size);
+#if 0
+	printf("Expanding heap from %p to %lx\n", alloc_start, (unsigned long) alloc_start + (nr_pages << PAGE_SHIFT));
+#endif
 	if(!map_pages(alloc_start, VM_PROT_WRITE, nr_pages))
 		return NULL;
-
+	
 	heap.size += nr_pages << PAGE_SHIFT;
 
 	return alloc_start;
@@ -55,14 +58,16 @@ void *expand_heap(size_t size)
 void *do_brk_change(intptr_t inc)
 {
 	assert(heap.brk != NULL);
+	scoped_spinlock guard{&heap_lock};
+
 	void *old_brk = heap.brk;
-	
+
 	uintptr_t new_brk = (uintptr_t) heap.brk + inc;
 	uintptr_t starting_address = (uintptr_t) heap.starting_address;
-	
-	if(new_brk >= starting_address + heap.size)
+	unsigned long heap_limit = starting_address + heap.size;
+	if(new_brk >= heap_limit)
 	{
-		size_t size = new_brk - starting_address;
+		size_t size = new_brk - heap_limit;
 
 		void *ptr = expand_heap(size);
 		if(!ptr)
@@ -76,7 +81,8 @@ void *do_brk_change(intptr_t inc)
 
 extern "C" void *sbrk(intptr_t increment)
 {
-	return do_brk_change(increment);
+	void *ret = do_brk_change(increment);
+	return ret;
 }
 
 void *zalloc(size_t size)

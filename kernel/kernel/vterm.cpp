@@ -76,6 +76,8 @@ static void draw_char(uint32_t c, unsigned int x, unsigned int y,
 		for(int j = 0; j < 8; j++)
 		{
 			struct color color;
+			if(c > 256)
+				while(1);
 			unsigned char f = font->font_bitmap[c * font->height + i];
 
 			if(f & font->mask[j])
@@ -246,7 +248,7 @@ ssize_t vterm_write(const void *buffer, size_t len, struct console *c)
 	const char *str = (const char *) buffer;
 	struct vterm *vt = (struct vterm *) c->priv;
 
-	ScopedSpinlock guard{&vt->vterm_lock};
+	scoped_spinlock guard{&vt->vterm_lock};
 
 	for(size_t i = 0; i != len; str++, written++, len--)
 	{

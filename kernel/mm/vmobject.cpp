@@ -15,7 +15,7 @@
 
 int VmObject::AddPage(size_t offset, struct page *page)
 {
-	ScopedSpinlock l(&lock);
+	scoped_spinlock l(&lock);
 
 	page->off = offset;
 
@@ -28,7 +28,7 @@ int VmObject::AddPage(size_t offset, struct page *page)
 
 struct page *VmObject::RemovePage(size_t page_off)
 {
-	ScopedSpinlock l(&lock);
+	scoped_spinlock l(&lock);
 
 	struct page *target = nullptr;
 	LinkedListIterator<struct page *> starting_it;
@@ -116,7 +116,7 @@ inline bool is_excluded(size_t lower, size_t upper, size_t x)
 
 void VmObject::PurgePages(size_t lower_bound, size_t upper_bound, unsigned int flags, VmObject *second)
 {
-	ScopedSpinlock l(&lock);
+	scoped_spinlock l(&lock);
 
 	auto node = page_list.GetHead();
 
@@ -172,7 +172,7 @@ int VmObject::Resize(size_t new_size)
 
 void VmObject::UpdateOffsets(size_t off)
 {
-	ScopedSpinlock l(&lock);
+	scoped_spinlock l(&lock);
 
 	for(auto page : page_list)
 	{
@@ -205,7 +205,7 @@ VmObject *VmObject::Split(size_t split_point, size_t hole_size)
 
 void VmObject::SanityCheck()
 {
-	ScopedSpinlock l(&lock);
+	scoped_spinlock l(&lock);
 
 	for(auto p : page_list)
 	{

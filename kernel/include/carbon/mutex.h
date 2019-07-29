@@ -7,7 +7,7 @@
 #include <carbon/lock.h>
 #include <carbon/scheduler.h>
 
-struct mutex
+struct raw_mutex
 {
 	struct spinlock llock;
 	struct thread *head;
@@ -16,16 +16,16 @@ struct mutex
 	struct thread *owner;
 };
 
-void mutex_lock(struct mutex *mtx);
-void mutex_unlock(struct mutex *mtx);
+void mutex_lock(struct raw_mutex *mtx);
+void mutex_unlock(struct raw_mutex *mtx);
 
-class Mutex
+class mutex
 {
 private:
-	struct mutex lock;
+	struct raw_mutex lock;
 public:
-	constexpr Mutex() : lock {} {}
-	~Mutex() {}
+	constexpr mutex() : lock {} {}
+	~mutex() {}
 	inline void Lock()
 	{
 		mutex_lock(&lock);

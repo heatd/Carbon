@@ -75,7 +75,7 @@ struct page *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct 
 	struct page_list *base_pg = NULL;
 	bool found_base = false;
 
-	ScopedSpinlock lock(&arena->lock);
+	scoped_spinlock lock(&arena->lock);
 
 	if(arena->free_pages < nr_pages)
 	{
@@ -126,7 +126,7 @@ struct page *page_alloc_from_arena(size_t nr_pages, unsigned long flags, struct 
 		if(tail)
 			tail->prev = head;
 
-		lock.Unlock();
+		lock.unlock();
 
 		struct page *plist = NULL;
 		struct page_list *pl = base_pg;
@@ -189,7 +189,7 @@ static void append_page(struct page_arena *arena, struct page_list *page)
 
 void page_free_pages(struct page_arena *arena, void *addr, size_t nr_pages)
 {
-	ScopedSpinlock lock(&arena->lock);
+	scoped_spinlock lock(&arena->lock);
 
 	if(!arena->page_list)
 	{

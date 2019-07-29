@@ -4,7 +4,7 @@ $(patsubst %.cpp,%.o,$(wildcard */*.cpp))
 CFLAGS+=-mno-red-zone -mno-sse -mno-sse2 -fpie -DPIC -fno-plt -fno-jump-tables
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -std=gnu11 -c $< -o $@
 %.o: %.cpp
 	$(CXX) $(CFLAGS) $(CPPFLAGS) -fno-exceptions -fno-rtti -c $< -o $@
 

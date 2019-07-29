@@ -9,7 +9,12 @@ extern "C" {
 
 #include <bits/errno.h>
 
-extern int errno;
+extern int __true_errno;
+
+/* I tried making things work, but it just doesn't want to... */
+int *__errno_location();
+
+#define errno	(*__errno_location())
 
 #ifdef _GNU_SOURCE
 extern char *program_invocation_short_name, *program_invocation_name;

@@ -21,18 +21,18 @@ void WaitQueue::WakeUpUnlocked()
 
 void WaitQueue::WakeUp()
 {
-	spin_lock_irqsave(&lock);
+	AcquireLock();
 	WakeUpUnlocked();
-	spin_unlock_irqrestore(&lock);
+	ReleaseLock();
 }
 
 void WaitQueue::WakeUpAll()
 {
-	spin_lock_irqsave(&lock);
+	AcquireLock();
 
 	while(head) WakeUpUnlocked();
 
-	spin_unlock_irqrestore(&lock);
+	ReleaseLock();
 }
 
 void WaitQueue::Wait()
@@ -40,14 +40,25 @@ void WaitQueue::Wait()
 	Scheduler::EnqueueThread(this, get_current_thread());
 	Scheduler::SetCurrentState(THREAD_BLOCKED);
 
-	spin_unlock_irqrestore(&lock);
+	ReleaseLock();
 
 	Scheduler::Yield();
 
-	spin_lock_irqsave(&lock);
+	AcquireLock();
 }
 
 void WaitQueue::ReleaseLock()
 {
-	spin_unlock_irqrestore(&lock);
+	if(allow_irqs)
+		spin_unlock(&lock);
+	else
+		spin_unlock_irqrestore(&lock);
+}
+
+void WaitQueue::AcquireLock()
+{
+	if(allow_irqs)
+		spin_lock(&lock);
+	else
+		spin_lock_irqsave(&lock);
 }

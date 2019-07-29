@@ -7,6 +7,8 @@
 #ifndef _CARBON_X86_CPU_H
 #define _CARBON_X86_CPU_H
 
+#include <carbon/array.h>
+
 namespace x86
 {
 
@@ -197,7 +199,7 @@ struct cpu
 	uint64_t tsc_rate;
 	int virtualAddressSpace, physicalAddressSpace;
 	/* Add more as needed */
-	uint64_t caps[8];
+	array<uint64_t, 8> caps;
 };
 
 __attribute__((hot))

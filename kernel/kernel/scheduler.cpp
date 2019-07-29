@@ -17,7 +17,7 @@
 #include <carbon/smp.h>
 #include <carbon/fpu.h>
 #include <carbon/mutex.h>
-#include <carbon/x86/eflags.h>
+#include <carbon/rwlock.h>
 
 extern struct serial_port com1;
 void serial_write(const char *s, size_t size, struct serial_port *port);
@@ -64,7 +64,8 @@ struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags)
 	__sync_fetch_and_add(&t->thread_id, 1);
 	if(!ArchCreateThreadLowLevel(t, regs))
 	{
-		free(t->fpu_area);
+		if(t->fpu_area)
+			free(t->fpu_area);
 		delete t;
 		return nullptr;
 	}
@@ -93,7 +94,8 @@ struct thread *CreateThread(ThreadCallback callback, void *context, CreateThread
 	__sync_fetch_and_add(&t->thread_id, 1);
 	if(!ArchCreateThread(t, callback, context, flags))
 	{
-		free(t->fpu_area);
+		if(t->fpu_area)
+			free(t->fpu_area);
 		delete t;
 		return nullptr;
 	}
@@ -234,7 +236,7 @@ void AppendThreadToQueue(struct thread *thread, unsigned int priority)
 
 struct thread *ScheduleThreadForCpu(struct thread *current)
 {
-	ScopedSpinlockIrqsave guard{get_per_cpu_ptr(scheduler_lock)};
+	scoped_spinlockIrqsave guard{get_per_cpu_ptr(scheduler_lock)};
 
 	if(current->status == THREAD_RUNNABLE)
 	{
@@ -307,7 +309,7 @@ void SetThreadAsRunnable(struct thread *thread)
 {
 	thread->status = THREAD_RUNNABLE;
 
-	ScopedSpinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
+	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
 	Scheduler::AppendThreadToQueue(thread, thread->priority);
 }
 
@@ -357,7 +359,7 @@ void Block(struct thread *t)
 
 void UnblockThread(struct thread *thread)
 {
-	ScopedSpinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
+	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
 
 	auto cpu = thread->cpu;
 
@@ -407,7 +409,7 @@ void SetupCpu(unsigned int cpu)
 }
 
 }
-void mutex_lock_slow_path(struct mutex *mutex)
+void mutex_lock_slow_path(struct raw_mutex *mutex)
 {
 	spin_lock(&mutex->llock);
 
@@ -435,7 +437,7 @@ void mutex_lock_slow_path(struct mutex *mutex)
 	__sync_synchronize();
 }
 
-void mutex_lock(struct mutex *mtx)
+void mutex_lock(struct raw_mutex *mtx)
 {
 	if(!__sync_bool_compare_and_swap(&mtx->counter, 0, 1))
 		mutex_lock_slow_path(mtx);
@@ -444,7 +446,7 @@ void mutex_lock(struct mutex *mtx)
 	mtx->owner = get_current_thread();
 }
 
-void mutex_unlock(struct mutex *mtx)
+void mutex_unlock(struct raw_mutex *mtx)
 {
 	mtx->owner = nullptr;
 	__sync_bool_compare_and_swap(&mtx->counter, 1, 0);
@@ -461,6 +463,98 @@ void mutex_unlock(struct mutex *mtx)
 	}
 
 	spin_unlock(&mtx->llock);
+}
+
+bool rw_lock::trylock_read()
+{
+	unsigned long c;
+	do
+	{
+		c = counter;
+		if(c == max_readers)
+			return false;
+		if(c == counter_locked_write)
+			return false;
+	} while(__sync_bool_compare_and_swap(&counter, c, c + 1) != true);
+	
+	__sync_synchronize();
+
+	return true;
+}
+
+bool rw_lock::trylock_write()
+{
+	bool st = __sync_bool_compare_and_swap(&counter, 0, counter_locked_write);
+	__sync_synchronize();
+	
+	return st;
+}
+
+void rw_lock::lock_read()
+{
+	llock.Lock();
+
+	Scheduler::SetCurrentState(THREAD_BLOCKED);
+
+	while(!trylock_read())
+	{
+		struct thread *thread = get_current_thread();
+
+		Scheduler::EnqueueThread(this, thread);
+		
+		llock.Unlock();
+
+		Scheduler::Yield();
+
+		llock.Lock();
+
+		Scheduler::SetCurrentState(THREAD_BLOCKED);
+	}
+
+	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+
+	llock.Unlock();
+
+	__sync_synchronize();
+}
+
+void rw_lock::lock_write()
+{
+	llock.Lock();
+
+	Scheduler::SetCurrentState(THREAD_BLOCKED);
+
+	while(!trylock_write())
+	{
+		struct thread *thread = get_current_thread();
+
+		Scheduler::EnqueueThread(this, thread);
+		
+		llock.Unlock();
+
+		Scheduler::Yield();
+
+		llock.Lock();
+
+		Scheduler::SetCurrentState(THREAD_BLOCKED);
+	}
+
+	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+
+	llock.Unlock();
+
+	__sync_synchronize();
+}
+
+void rw_lock::unlock_read()
+{
+	__sync_sub_and_fetch(&counter, 1);
+}
+
+void rw_lock::unlock_write()
+{
+	counter = 0;
+	__sync_synchronize();
 }
 
 #ifdef MUTEX_TEST

@@ -240,7 +240,6 @@ void setup_debug_register(unsigned long addr, unsigned int size, unsigned int co
 }
 
 void asan_init();
-extern "C" void _init();
 
 void efi_setup_framebuffer(struct boot_info *info)
 {
@@ -261,17 +260,8 @@ void efi_setup_framebuffer(struct boot_info *info)
 	vterm_initialize();
 }
 
-void heap_set_start(uintptr_t heap_start);
-
-void thread_test(void *context)
-{
-	while(true)
-	{
-		Scheduler::Block(get_current_thread());
-	}
-}
-
-void paging_protect_kernel(void);
+void x86_init(struct boot_info *info);
+int kernel_init(struct boot_info *info);
 
 extern "C" uint64_t bsp_gdt;
 extern "C" void efi_entry(struct boot_info *info)
@@ -304,36 +294,10 @@ extern "C" void efi_entry(struct boot_info *info)
 
 	efi_setup_physical_memory(info);
 	
-	paging_protect_kernel();
+	x86_init(info);
 
-
-	x86_init_exceptions();
-
-	uintptr_t heap_start = 0xffffa00000000000;
-	heap_set_start(heap_start);
-
-	vm_init();
-
-#if 0
-	asan_init();
-#endif
-
-	/* Invoke global constructors */
-	_init();
-
-	Percpu::Init();
-
-	Gdt::InitPercpu();
-
-	Fpu::Init();
-
-	Scheduler::Initialize();
-
-	Acpi::Init();
-
-	x86::Apic::Init();
-
-	Smp::BootCpus();
+	/* x86 initialization done, do the rest now */
+	kernel_init(info);
 
 	Scheduler::Block(get_current_thread());
 }

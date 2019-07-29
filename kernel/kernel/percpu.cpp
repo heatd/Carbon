@@ -13,10 +13,19 @@
 extern unsigned char __percpu_start;
 extern unsigned char __percpu_end;
 
+/* Define errno somewhere */
+PER_CPU_VAR(int __true_errno) = 0;
+
+PER_CPU_VAR(unsigned long __cpu_base) = 0;
+
+extern "C" int *__errno_location()
+{
+	return get_per_cpu_ptr(__true_errno);
+}
+
 namespace Percpu
 {
 
-PER_CPU_VAR(unsigned long __cpu_base) = 0;
 unsigned long *percpu_bases = nullptr;
 unsigned long nr_bases = 0;
 
@@ -32,12 +41,10 @@ void AddPercpu(unsigned long base)
 void Init()
 {
 	size_t percpu_size = (unsigned long) &__percpu_end - (unsigned long) &__percpu_start;
-	printf("Percpu size: %lu\n", percpu_size);
+	printf("percpu: .percpu size: %lu\n", percpu_size);
 
 	void *buffer = zalloc(percpu_size);
 	assert(buffer != nullptr);
-
-	printf("buffer: %p\n", buffer);
 
 	wrmsr(GS_BASE_MSR, (unsigned long) buffer);
 

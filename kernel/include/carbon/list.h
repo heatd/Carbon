@@ -89,7 +89,7 @@ private:
 	LinkedListNode<T> *head, *tail;
 public:
 	LinkedList<T>() : head(nullptr), tail(nullptr){}
-	
+
 	/* Low-level-ish interface to the linked list */
 	LinkedListNode<T> *GetHead() const
 	{
@@ -132,7 +132,7 @@ public:
 		return LinkedListIterator<T>(nullptr);
 	}
 
-	inline bool Remove(T& data, LinkedListIterator<T>& it)
+	inline bool Remove(const T& data, LinkedListIterator<T>& it)
 	{
 		while(it != end())
 		{
@@ -161,7 +161,7 @@ public:
 		return false;
 	}
 
-	inline bool Remove(T& data)
+	inline bool Remove(const T& data)
 	{
 		LinkedListIterator<T> it = begin();
 

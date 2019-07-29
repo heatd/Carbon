@@ -383,7 +383,7 @@ uint32_t __pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_
 
 	address = (uint32_t)((lbus << 16) | (lslot << 11) |
                      (lfunc << 8) | (offset & 0xfc) | ((uint32_t)0x80000000));
-	ScopedSpinlock l(&pci_lock);
+	scoped_spinlock l(&pci_lock);
 	/* write out the address */
 	outl(CONFIG_ADDRESS, address);
 	/* read in the data */
@@ -409,7 +409,7 @@ void __pci_write_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
 	address = (uint32_t)((lbus << 16) | (lslot << 11) |
 		  (lfunc << 8) | (offset & 0xfc) | ((uint32_t) 0x80000000));
 	
-	ScopedSpinlock l(&pci_lock);
+	scoped_spinlock l(&pci_lock);
 	/* write out the address */
 	outl(CONFIG_ADDRESS, address);
 	/* read in the data */
@@ -427,7 +427,7 @@ void __pci_write_word_aligned(uint8_t bus, uint8_t slot, uint8_t func,
 	address = (uint32_t)((lbus << 16) | (lslot << 11) |
 		  (lfunc << 8) | (offset & 0xfc) | ((uint32_t) 0x80000000));
 	
-	ScopedSpinlock l(&pci_lock);
+	scoped_spinlock l(&pci_lock);
 	/* write out the address */
 	outl(CONFIG_ADDRESS, address);
 	/* read in the data */
@@ -484,7 +484,7 @@ void __pci_write_qword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
 	address = (uint32_t)((lbus << 16) | (lslot << 11) |
 		  (lfunc << 8) | (offset & 0xfc) | ((uint32_t)0x80000000));
 	
-	ScopedSpinlock l(&pci_lock);
+	scoped_spinlock l(&pci_lock);
 	/* write out the address */
 	outl(CONFIG_ADDRESS, address);
 	/* Write out the lower half of the data */

@@ -13,10 +13,13 @@
 struct heap
 {
 	void *starting_address;
-	size_t size;
 	void *brk;
+	size_t size;
 };
 
+#ifdef __cplusplus
+extern "C"
+#endif
 struct heap *heap_get();
 
 #endif

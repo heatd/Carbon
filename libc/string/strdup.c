@@ -8,9 +8,10 @@
 #include <errno.h>
 char *strdup(const char *s)
 {
-	char *new_string = malloc(strlen(s) + 1);
+	size_t len = strlen(s) + 1;
+	char *new_string = malloc(len);
 	if(!new_string)
 		return errno = ENOMEM, NULL;
-	strcpy(new_string, s);
+	strlcpy(new_string, s, len);
 	return new_string;
 }

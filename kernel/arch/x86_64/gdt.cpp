@@ -4,7 +4,6 @@
 * check LICENSE at the root directory for more information
 */
 #include <stdlib.h>
-#include <stdio.h>	/* TODO: REMOVE */
 #include <string.h>
 #include <assert.h>
 

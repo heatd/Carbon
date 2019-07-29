@@ -69,7 +69,7 @@ public:
 
 	inline bool FindFreeBit(unsigned long *bit)
 	{
-		ScopedSpinlock guard {&lock};
+		scoped_spinlock guard {&lock};
 		for(size_t i = 0; i < size_in_longs; i++)
 		{
 			if(bitmap[i] == ULONG_MAX)

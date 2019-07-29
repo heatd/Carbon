@@ -15,8 +15,10 @@ struct WaitQueue
 	struct spinlock lock;
 	struct thread *head;
 	struct thread *tail;
+	const bool allow_irqs;
 
-	constexpr WaitQueue() : lock{}, head{nullptr}, tail{nullptr} {}
+	constexpr WaitQueue(bool allow_irqs = true)
+		: lock{}, head{nullptr}, tail{nullptr}, allow_irqs{allow_irqs} {}
 	~WaitQueue() {}
 
 	void WakeUpUnlocked();
@@ -24,10 +26,7 @@ struct WaitQueue
 	void WakeUpAll();
 	void Wait();
 	void ReleaseLock();
-	inline void AcquireLock()
-	{
-		spin_lock_irqsave(&lock);
-	}
+	void AcquireLock();
 };
 
 #endif

@@ -42,13 +42,13 @@ public:
 };
 
 template <typename LockType, bool irq_save = false>
-class ScopedLock
+class scoped_lock
 {
 private:
 	bool IsLocked;
 	LockType *internal_lock;
 public:
-	void Lock()
+	void lock()
 	{
 		if(irq_save)
 			internal_lock->LockIrqsave();
@@ -57,7 +57,7 @@ public:
 		IsLocked = true;
 	}
 
-	void Unlock()
+	void unlock()
 	{
 		if(irq_save)
 			internal_lock->UnlockIrqrestore();
@@ -66,20 +66,20 @@ public:
 		IsLocked = false;
 	}
 
-	ScopedLock(LockType *lock) : internal_lock(lock)
+	scoped_lock(LockType *lock) : internal_lock(lock)
 	{
-		Lock();
+		this->lock();
 	}
 
-	~ScopedLock()
+	~scoped_lock()
 	{
 		if(IsLocked)
-			Unlock();
+			unlock();
 	}
 };
 
-using ScopedSpinlock = ScopedLock<Spinlock>;
-using ScopedSpinlockIrqsave = ScopedLock<Spinlock, true>;
+using scoped_spinlock = scoped_lock<Spinlock>;
+using scoped_spinlockIrqsave = scoped_lock<Spinlock, true>;
 
 #endif
 

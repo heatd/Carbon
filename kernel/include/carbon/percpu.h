@@ -20,7 +20,7 @@ unsigned int get_cpu_nr();
 	(decltype(var)) val;			\
 })
 
-#define get_per_cpu_no_cast(var) 			\
+#define get_per_cpu_no_cast(var) 		\
 ({						\
 	unsigned long val;			\
 	__asm__ __volatile__("movq %%gs:" 	\
@@ -114,10 +114,10 @@ unsigned int get_cpu_nr();
 	}						\
 })
 
+#ifdef __cplusplus
 namespace Percpu
 {
 
-extern unsigned long __cpu_base;
 extern unsigned long *percpu_bases;
 void Init();
 unsigned long InitForCpu(unsigned int cpu);
@@ -146,15 +146,21 @@ if(cpu == get_cpu_nr())				\
 else other_cpu_add(var, val, cpu);		\
 } while(0)
 
-#define get_per_cpu_ptr_no_cast(var)								\
+extern "C"
+#endif
+unsigned long __cpu_base;
+
+#define get_per_cpu_ptr_no_cast(var)							\
 ({											\
-	unsigned long ___cpu_base = get_per_cpu(Percpu::__cpu_base);			\
-	((unsigned long) &var + ___cpu_base);				\
+	unsigned long ___cpu_base = get_per_cpu_no_cast(__cpu_base);			\
+	((unsigned long) &var + ___cpu_base);						\
 })
 
+#ifdef __cplusplus
 #define get_per_cpu_ptr(var)								\
 ({											\
-	(decltype(var) *) get_per_cpu_ptr_no_cast(var);						\
+	(decltype(var) *) get_per_cpu_ptr_no_cast(var);					\
 })
+#endif
 
 #endif

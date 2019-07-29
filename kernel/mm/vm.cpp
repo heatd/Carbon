@@ -33,6 +33,7 @@ struct vm_region *vm_reserve_region(struct address_space *as,
 				    unsigned long start, size_t size)
 {
 	struct vm_region *region = (struct vm_region *) malloc(sizeof(*region));
+
 	if(!region)
 		return NULL;
 
@@ -53,7 +54,7 @@ struct vm_region *vm_reserve_region(struct address_space *as,
 
 	return region; 
 }
-
+#define DEBUG_VM 0
 struct vm_region *vm_allocate_region(struct address_space *as,
 				     unsigned long min, size_t size)
 {
@@ -284,7 +285,7 @@ enum VmFaultStatus VmFault::Handle()
 	/* TODO: Remove this. */
 	assert(!kernel_address_space.lock.IsLocked());
 
-	ScopedSpinlock l(&kernel_address_space.lock);
+	scoped_spinlock l(&kernel_address_space.lock);
 	auto region = FindRegion((void *) fault_address, kernel_address_space.area_tree);
 
 	if(!region)
@@ -311,6 +312,7 @@ struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long
 struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size,
 			       unsigned long flags, VmObject *vmo)
 {
+	scoped_spinlock guard{&as->lock};
 	struct vm_region *reg = AllocateRegionInternal(as, min, size);
 
 	if(!reg)
@@ -377,7 +379,7 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 	unsigned long addr = (unsigned long) __addr;
 	auto limit = addr + size;
 
-	ScopedSpinlock l(&as->lock);
+	scoped_spinlock l(&as->lock);
 
 	while(addr < limit)
 	{

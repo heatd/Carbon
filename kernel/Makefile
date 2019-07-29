@@ -70,9 +70,9 @@ $(filter-out $(ARCHDIR)/crtn.o, $(filter-out $(ARCHDIR)/crti.o, \
 $(patsubst %.S,%.o,$(wildcard $(ARCHDIR)/*.S))))
 
 CRTI_OBJ:=$(ARCHDIR)/crti.o
-CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=crtbegin.o)
-CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=crtend.o)
-LIBGCC_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=libgcc.a)
+CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=crtbegin.o)
+CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=crtend.o)
+LIBGCC_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=libgcc.a)
 CRTN_OBJ:=$(ARCHDIR)/crtn.o
 
 ALL_OUR_OBJS:=\
@@ -88,23 +88,25 @@ $(CRTEND_OBJ) \
 $(CRTN_OBJ) \
 $(objs-y)
 
+CLANG_TIDY_CHECKS:="performance*, modernize-pass-by-value"
 all: onyx-vdso.so.0 carbon
 
 .PHONY: all clean install install-headers install-kernel kernel-modules drivers
 
 carbon: $(OBJ_LINK_LIST) $(ARCHDIR)/$(LINKER_SCRIPT_NAME)
 	@echo [LD] $@
-	$(CC) -T $(ARCHDIR)/$(LINKER_SCRIPT_NAME) -o $@ $(CFLAGS) $(OBJ_LINK_LIST) $(LDFLAGS) $(LIBS)
+	$(CC) -T $(ARCHDIR)/$(LINKER_SCRIPT_NAME) -fuse-ld=bfd -o $@ $(CFLAGS) $(OBJ_LINK_LIST) $(LDFLAGS) $(LIBS)
 	cp carbon carbon-unstripped
 	strip -g carbon
 
 acpica/%.o: acpica/%.c
 	@echo [CC] $<
-	@$(CC) -c $< -o $@ -std=c11 $(ACPICA_CFLAGS) $(CPPFLAGS)
+	@$(CC) -c $< -o $@ -std=gnu11 $(ACPICA_CFLAGS) $(CPPFLAGS)
 
 %.o: %.c
 	@echo [CC] $<
-	$(CC) -c $< -o $@ -std=c11 $(CFLAGS) $(CPPFLAGS) -Wno-error=deprecated-declarations
+	-clang-tidy -checks=$(CLANG_TIDY_CHECKS) $< -- $(CFLAGS) $(CPPFLAGS) -D__onyx__ >> clang-tidy.out
+	$(CC) -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS) -Wno-error=deprecated-declarations
 
 %.o: %.S
 	@echo [AS] $<
@@ -112,11 +114,16 @@ acpica/%.o: acpica/%.c
 
 mm/kasan.o: mm/kasan.cpp
 	@echo [CXX] $< $(CFLAGS) $(CPPFLAGS)
-	@$(CXX) -c $< -o $@ -std=c++14 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -fno-sanitize=kernel-address
+	-clang-tidy -checks=$(CLANG_TIDY_CHECKS) $< -- $(CFLAGS) $(CPPFLAGS) -D__onyx__ >> clang-tidy.out
+	@$(CXX) -c $< -o $@ -std=c++17 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -fno-sanitize=kernel-address
 
 %.o: %.cpp
 	@echo [CXX] $< $(CFLAGS) $(CPPFLAGS)
-	@$(CXX) -c $< -o $@ -std=c++14 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS)
+	-clang-tidy -checks=$(CLANG_TIDY_CHECKS) $< -- $(CFLAGS) $(CPPFLAGS) -D__onyx__ >> clang-tidy.out
+	@$(CXX) -c $< -o $@ -std=c++17 $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS)
+
+mm/dlmalloc.o: mm/dlmalloc.c
+	$(CC) -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS) -Wno-error=deprecated-declarations
 
 $(ARCHDIR)/__vdso.o: $(ARCHDIR)/__vdso.c
 	@echo [CC] $<
@@ -128,6 +135,7 @@ clean:
 	rm -f carbon carbon-unstripped $(OBJS) $(ALL_OUR_OBJS) *.o */*.o */*/*.o
 	rm -f include/carbon/config.h
 	rm -f drivers.config
+	rm -f clang-tidy.out
 
 install: install-headers install-kernel
 

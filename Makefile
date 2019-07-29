@@ -24,9 +24,12 @@ export BINDIR:=$(PREFIX)/bin
 export MANDIR:=/usr/share/man
 export PKGDIR:=/pkg
 export CFLAGS?=-Os -g
-export CPPFLAGS:=
+export CPPFLAGS:= --sysroot=$(PWD)/sysroot
 
 # Configure the cross-compiler to use the desired system root.
+# NOTE: We need to repeat --sysroot=$(PWD)/sysroot in case we're running under scan-build,
+# which overrides $(CC) and $(CXX) and doesn't let us add the --sysroot
+
 export CXX:=$(CXX) --sysroot=$(PWD)/sysroot
 export CC:=$(CC) --sysroot=$(PWD)/sysroot
 
@@ -46,6 +49,8 @@ efibootldr: install-headers
 	$(MAKE) -C $@ install
 
 kernel: install-headers
+	# Remove the old clang-tidy.out
+	rm -f kernel/clang-tidy.out
 	$(MAKE) -C $@ install
 
 libc: install-headers
