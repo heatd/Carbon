@@ -88,7 +88,7 @@ public:
 		if constexpr(type == scoped_rwlock_read)
 			unlock_read();
 		else
-			lock_write();
+			unlock_write();
 	}
 
 	constexpr scoped_rwlock(rw_lock *__l) : l(__l)

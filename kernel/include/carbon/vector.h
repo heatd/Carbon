@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <carbon/array_iterator.h>
+#include <carbon/panic.h>
 
 template <typename T>
 class vector

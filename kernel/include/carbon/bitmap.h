@@ -36,11 +36,16 @@ private:
 	Spinlock lock;
 	static constexpr unsigned long bits_per_entry = sizeof(unsigned long) * 8;
 public:
-	Bitmap() : size(s), lock{}
+	Bitmap() : bitmap{}, size(s), lock{}
 	{
 		size_in_longs = size / (8 * sizeof(unsigned long));
 		if(size % (8 * sizeof(unsigned long)))
 			size_in_longs++;
+	}
+
+	inline size_t GetSize()
+	{
+		return size;
 	}
 
 	inline void SetSize(size_t _size)
@@ -59,11 +64,37 @@ public:
 		if(nr_bytes % sizeof(unsigned long))
 			size_in_longs++;
 
-		bitmap = new unsigned long[size_in_longs];
+		bitmap = (unsigned long *) malloc(nr_bytes);
 		if(!bitmap)
 			return false;
 		memset(bitmap, filler, nr_bytes);
 
+		return true;
+	}
+
+	inline bool ReallocBitmap(size_t new_size, unsigned char filler = 0x0)
+	{
+		size_t old_nr_bytes = size / 8;
+		if(size % 8)
+			old_nr_bytes++;
+
+		size_t nr_bytes = new_size / 8;
+		if(new_size % 8)
+			nr_bytes++;
+
+		auto new_size_in_longs = nr_bytes / sizeof(unsigned long);
+		if(nr_bytes % sizeof(unsigned long))
+			new_size_in_longs++;
+
+		auto _bitmap = realloc(bitmap, nr_bytes);
+		if(!_bitmap)
+			return false;
+		memset((char *) _bitmap + old_nr_bytes, filler, nr_bytes - old_nr_bytes);
+
+		bitmap = (unsigned long *) _bitmap;
+		size = new_size;
+		size_in_longs = new_size_in_longs;
+	
 		return true;
 	}
 

@@ -11,8 +11,16 @@
 #include <carbon/fs/root.h>
 #include <carbon/fs/vfs.h>
 #include <carbon/rwlock.h>
+#include <carbon/handle_table.h>
 
 void initrd_init(struct module *mod);
+
+class dummy_ko : public refcountable
+{
+public:
+	dummy_ko() : refcountable{} {};
+	~dummy_ko() {};
+};
 
 int kernel_init(struct boot_info *info)
 {
@@ -25,5 +33,6 @@ int kernel_init(struct boot_info *info)
 
 	auto rootfs = get_root()->get_inode()->i_fs;
 	(void) rootfs;
+
 	return 0;
 }
