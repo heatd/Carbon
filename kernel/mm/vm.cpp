@@ -158,14 +158,13 @@ void vm_destroy_region(struct address_space *as, struct vm_region *region)
 {
 	vm_remove_region(as, region);	
 	/* Slowly destroy the vm region object now */
-
 	if(region->vmo)
 		delete region->vmo;
 
 	free(region);
 }
 
-void vm_assign_vmo(struct vm_region *region, VmObject *vmo)
+void vm_assign_vmo(struct vm_region *region, vm_object *vmo)
 {
 	region->vmo = vmo;
 }
@@ -177,7 +176,7 @@ int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
 
 	while(nr_pages--)
 	{
-		struct page *p = region->vmo->Get(off);
+		struct page *p = region->vmo->get(off);
 
 		assert(p != nullptr);
 
@@ -261,14 +260,14 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 	unsigned long fault_addr_aligned = fault_address & ~(PAGE_SIZE - 1);
 	size_t off = fault_addr_aligned - region->start;
 	
-	auto page = vmo->Get(off);
+	auto page = vmo->get(off);
 
 	if(!page)
 	{
 		vmo->lock.Unlock();
-		if(vmo->Commit(off) < 0)
+		if(vmo->commit(off) < 0)
 			return VmFaultStatus::VM_SEGFAULT;
-		page = vmo->Get(off);
+		page = vmo->get(off);
 	}
 
 	if(!map_phys_to_virt(region->start + off, (unsigned long ) page->paddr, region->perms))
@@ -283,7 +282,9 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 enum VmFaultStatus VmFault::Handle()
 {
 	/* TODO: Remove this. */
-	assert(!kernel_address_space.lock.IsLocked());
+	/* TODO: Don't assume we're holding the lock */
+	if(kernel_address_space.lock.IsLocked())
+		return VmFaultStatus::VM_SEGFAULT;
 
 	scoped_spinlock l(&kernel_address_space.lock);
 	auto region = FindRegion((void *) fault_address, kernel_address_space.area_tree);
@@ -310,7 +311,7 @@ struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long
 #define VM_PERM_FLAGS_MASK		(VM_PROT_USER | VM_PROT_WRITE | VM_PROT_EXEC)
 
 struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size,
-			       unsigned long flags, VmObject *vmo)
+			       unsigned long flags, vm_object *vmo)
 {
 	scoped_spinlock guard{&as->lock};
 	struct vm_region *reg = AllocateRegionInternal(as, min, size);
@@ -320,23 +321,21 @@ struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size
 
 	reg->perms = flags & VM_PERM_FLAGS_MASK;
 
-	vmo->SetOwner(reg);
+	vmo->set_owner(reg);
 
 	vm_assign_vmo(reg, vmo);
 	
 	if(flags & VM_PROT_USER)
 		return reg;
 
-	if(vmo->Populate(0, size) < 0)
+	if(vmo->populate(0, size) < 0)
 	{
-		delete vmo;
 		vm_destroy_region(as, reg);
 		return nullptr;
 	}
 
 	if(vm_update_mapping(reg, 0, size) < 0)
 	{
-		delete vmo;
 		vm_destroy_region(as, reg);
 		return nullptr;
 	}
@@ -351,7 +350,7 @@ struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size
 
 void *mmap(struct address_space *as, unsigned long min, size_t size, unsigned long flags)
 {
-	VmObjectPhys *phys = new VmObjectPhys(false, size_to_pages(size), nullptr, nullptr);
+	vm_object_phys *phys = new vm_object_phys(false, size_to_pages(size), nullptr);
 
 	if(!phys)
 	{
@@ -403,7 +402,7 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 
 				if(vm_add_region(as, region) < 0)
 					return -ENOMEM;
-				region->vmo->TruncateBeginningAndResize(to_shave_off);
+				region->vmo->truncate_beginning_and_resize(to_shave_off);
 			}
 			else
 			{
@@ -432,7 +431,7 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 
 				vm_remove_region(as, region);
 
-				VmObject *second = region->vmo->Split(offset, to_shave_off);
+				vm_object *second = region->vmo->split(offset, to_shave_off);
 				if(!second)
 				{
 					vm_remove_region(as, new_region);
@@ -447,7 +446,7 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 			}
 			else
 			{
-				region->vmo->Resize(region->size - to_shave_off);
+				region->vmo->resize(region->size - to_shave_off);
 				region->size -= to_shave_off;
 			}
 		}
@@ -464,12 +463,12 @@ int munmap(struct address_space *as, void *__addr, size_t size)
 void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
 	      size_t size, unsigned long flags)
 {
-	VmObjectMmio *vmo = new VmObjectMmio(false, size_to_pages(size), nullptr, nullptr);
+	vm_object_mmio *vmo = new vm_object_mmio(false, size_to_pages(size), nullptr);
 
 	if(!vmo)
 		return nullptr;
 
-	if(!vmo->Init(phys))
+	if(!vmo->init(phys))
 	{
 		delete vmo;
 		return nullptr;
@@ -479,7 +478,6 @@ void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
 
 	if(!region)
 	{
-		delete vmo;
 		return nullptr;
 	}
 	else

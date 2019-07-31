@@ -47,6 +47,7 @@ typedef struct tree_node_base {
     dict_compare_func	cmp_func; \
     size_t		rotation_count
 
+
 typedef struct tree_base {
     TREE_FIELDS(struct tree_node_base);
 } tree_base;
@@ -54,6 +55,7 @@ typedef struct tree_base {
 #define TREE_ITERATOR_FIELDS(tree_type, node_type) \
     tree_type*		tree; \
     node_type*		node
+
 
 /* Rotate |node| left.
  * |node| and |node->rlink| must not be NULL. */

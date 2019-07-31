@@ -20,6 +20,9 @@ void idt_load();
 extern "C"
 void smpboot_main(unsigned long gs_base)
 {
+	/*
+	unsigned int *cpu_nr = (unsigned int*) ((char *) gs_base + (unsigned int) &Smp::cpu_nr);
+	wrmsr(IA32_TSC_AUX, *cpu_nr);*/
 	/* Write the base to the GS_BASE */
 	wrmsr(GS_BASE_MSR, gs_base);
 

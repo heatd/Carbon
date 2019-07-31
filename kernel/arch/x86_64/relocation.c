@@ -16,6 +16,7 @@
 #define RELOCATE_R_X86_64_32S(S, A) (S + A)
 #define RELOCATE_R_X86_64_PC32(S, A, P) (S + A - P)
 #define RELOCATE_R_X86_64_RELATIVE(B, A) (B + A)
+#define DEFAULT_VIRT_BASE		0xffffffff80000000
 
 #define R_X86_64_PLT32		4
 #define R_X86_64_NONE	0
@@ -24,40 +25,43 @@
 #define R_X86_64_32	10
 #define R_X86_64_32S	11
 
+#define SECTION_BOOT	__attribute__((section(".boot")))
+#define SECTION_BOOTDATA	__attribute__((section(".boot_data")))
+
+SECTION_BOOTDATA
 uintptr_t kernel_base = 0;
 
-void do_r_x86_64_none(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
+SECTION_BOOT
+void do_r_x86_64_none(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *p)
 {}
 
-void do_r_x86_64_64(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
+SECTION_BOOT
+void do_r_x86_64_64(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *__p)
 {
-	uintptr_t *p = (uintptr_t *) pc;
+	uintptr_t *p = (uintptr_t *) __p;
 	*p = RELOCATE_R_X86_64_64(symbol, addend);
 }
 
-void do_r_x86_64_32S(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
+SECTION_BOOT
+void do_r_x86_64_32S(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *__p)
 {
-	int32_t *p = (int32_t *) pc;
+	int32_t *p = (int32_t *) __p;
 	*p = RELOCATE_R_X86_64_32S(symbol, addend);
 }
 
-void do_r_x86_64_32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
+SECTION_BOOT
+void do_r_x86_64_32(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *__p)
 {
-	uint32_t *p = (uint32_t *) pc;
+	uint32_t *p = (uint32_t *) __p;
 	*p = RELOCATE_R_X86_64_32(symbol, addend);
 }
 
-void do_r_x86_64_pc32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
+SECTION_BOOT
+void do_r_x86_64_pc32(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *__p)
 {
-	uint32_t *p = (uint32_t *) pc;
+	uint32_t *p = (uint32_t *) __p;
 
-	*p = RELOCATE_R_X86_64_PC32(symbol - kernel_base, addend, pc);
-}
-
-void do_r_x86_64_plt32(uintptr_t symbol, uintptr_t addend, uintptr_t pc)
-{
-	while(1)
-		__asm__ __volatile__("hlt");		/* Bad reloc */
+	*p = RELOCATE_R_X86_64_PC32(symbol, addend, pc);
 }
 
 extern uint64_t pml4[4096];
@@ -66,7 +70,7 @@ extern uint64_t pdpt2[4096];
 extern uint64_t pdlower[4096];
 extern uint64_t pdhigher[4096];
 
-__attribute__((section(".boot")))
+SECTION_BOOT
 void remap_kernel(uintptr_t base_address)
 {
 	const unsigned int paging_levels = 4;
@@ -116,7 +120,7 @@ void remap_kernel(uintptr_t base_address)
 	}
 }
 
-__attribute__((section(".boot")))
+SECTION_BOOT
 void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 {
 	remap_kernel(base_address);
@@ -124,22 +128,40 @@ void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 	kernel_base = base_address;
 
 	struct relocation *r;
-	void (*reloc_jmp_tab[])(uintptr_t symbol, uintptr_t addend, uintptr_t pc) =
+	void (*reloc_jmp_tab[])(uintptr_t symbol, uintptr_t addend, uintptr_t pc, void *p) =
 	{
 		do_r_x86_64_none,
 		[R_X86_64_64] = do_r_x86_64_64,
 		[R_X86_64_32S] = do_r_x86_64_32S,
 		[R_X86_64_32] = do_r_x86_64_32,
 		[R_X86_64_PC32] = do_r_x86_64_pc32,
-		[R_X86_64_PLT32] = do_r_x86_64_plt32
+		[R_X86_64_PLT32] = do_r_x86_64_pc32
 	};
 
 	/* Use a jump table in order to avoid relocations(so we don't patch ourselves
 	 to invalid addresses) */
 	for(r = info->relocations; r != NULL; r = r->next)
 	{
-		r->symbol_value += base_address;
-		reloc_jmp_tab[r->type](r->symbol_value, r->addend, (uintptr_t) r->address);
+		/* The symbol value we get is actually phys_addr + DEFAULT_VIRT_BASE
+		 * so to get the relocated symbol, we sub DEFAULT_VIRT_BASE and add base_address */
+		bool sym_is_higher = r->symbol_value > DEFAULT_VIRT_BASE;
+		if(sym_is_higher)
+			r->symbol_value = r->symbol_value - DEFAULT_VIRT_BASE + base_address;
+
+		/* if(r->symbol_value < DEFAULT_VIRT_BASE && r->symbol_value)
+			__asm__ __volatile__("hlt");*/
+
+		unsigned long index = r->type;
+		if(index != R_X86_64_64 && index != R_X86_64_32S && index != R_X86_64_32 &&
+		   index != R_X86_64_PC32 && index != R_X86_64_PLT32)
+		   	__asm__ __volatile__("hlt");
+		if(index >= sizeof(reloc_jmp_tab) / 8)
+			__asm__ __volatile__("hlt");
+		unsigned long addr = (unsigned long) r->address;
+		bool is_higher_half = addr > DEFAULT_VIRT_BASE;
+		unsigned long final_pc = is_higher_half ? addr - DEFAULT_VIRT_BASE + base_address : addr;
+		unsigned long pointer = is_higher_half ? addr - DEFAULT_VIRT_BASE : addr;
+		reloc_jmp_tab[index](r->symbol_value, r->addend, final_pc, (void *) pointer);
 	}
 #endif
 

@@ -8,130 +8,112 @@
 #define _VMOBJECT_H
 
 #include <stddef.h>
+#include <string.h>
+#include <stdio.h>
 
 #include <carbon/vm.h>
 #include <carbon/lock.h>
 #include <carbon/page.h>
 #include <carbon/list.h>
+#include <carbon/panic.h>
+#include <carbon/smart.h>
 
+#include <libdict/rb_tree.h>
 struct page;
 
-class VmObject
+class vm_object
 {
 
 protected:
 	/* TODO: Create a list of owners when we're able to share VMOs */
 	struct vm_region *owner;
 	size_t nr_pages;
-	LinkedList<struct page *> page_list;
+	struct rb_tree page_list;
 	bool should_demand_page;
 
-	int AddPage(size_t page_off, struct page *page);
-	struct page *RemovePage(size_t page_off);
-	void PurgePages(size_t lower_bound, size_t upper_bound, unsigned int flags, VmObject *second = nullptr);
-	void UpdateOffsets(size_t old_off);
+	int add_page(size_t page_off, struct page *page);
+	struct page *remove_page(size_t page_off);
+	void purge_pages(size_t lower_bound, size_t upper_bound, unsigned int flags, vm_object *second = nullptr);
+	void update_offsets(size_t old_off);
+	void destroy_tree(void (*func)(void *key, void *data));
 public:
 	Spinlock lock;
 	static constexpr bool is_refcountable = true;
-	
-	static inline bool PageToList(LinkedList<struct page *> *list, struct page *pages)
-	{
-		for(struct page *p = pages; p != nullptr; p = p->next_un.next_allocation)
-		{
-			if(!list->Add(p))
-			{
-				/* Undo stuff if something fails */
-				for(struct page *page = pages; page != p; page = page->next_un.next_allocation)
-					list->Remove(page);
-				
-				return false;
-			}
-		}
 
-		return true;
-	}
-	
-	int Populate(size_t starting_off, size_t region_size);
-
-	VmObject(bool should_demand_page,
+	vm_object(bool should_demand_page,
 		 size_t nr_pages,
-		 struct vm_region *owner,
-		 struct page *init_pages)
-		 : owner(owner), nr_pages(nr_pages), page_list(), lock()
+		 struct vm_region *owner)
+		 : owner(owner), nr_pages(nr_pages), lock()
 	{
-		assert(PageToList(&page_list, init_pages) != false);
-	};
-
-	VmObject(bool should_demand_page,
-		 size_t nr_pages,
-		 struct vm_region *owner,
-		 LinkedList<struct page *> init_pages)
-		 : owner(owner), nr_pages(nr_pages), page_list(), lock()
-	{
-		assert(page_list.Copy(&init_pages) != false);
+		memset((void *) &page_list, 0, sizeof(page_list));
+		page_list.cmp_func = vm_cmp;
 	};
 
 
-	inline void SetOwner(struct vm_region *_owner)
+	inline void set_owner(struct vm_region *_owner)
 	{
 		owner = _owner;
 	}
 
-	virtual ~VmObject(){};
-	int Fork();
-	virtual int Commit(size_t offset) = 0;
-	struct page *Get(size_t offset);
-	int Resize(size_t new_size);
-	VmObject *Split(size_t split_point, size_t hole_size);
-	virtual VmObject *CreateHollowCopy() = 0;
-	void SanityCheck();
-	void TruncateBeginningAndResize(size_t off);
+	/* Base ~vm_object, deletes the tree and disposes of the pages using dispose_page() */
+	virtual ~vm_object();
+
+	/* Implemented in specializations */
+	virtual void dispose_page(struct page *p) {};
+	virtual int commit(size_t offset) = 0;
+	virtual vm_object *create_hollow_copy() = 0;
+	virtual int populate(size_t starting_off, size_t region_size);
+
+	/* Generic functions */
+	struct page *get(size_t offset);
+	int resize(size_t new_size);
+	vm_object *split(size_t split_point, size_t hole_size);
+	void sanity_check();
+	void truncate_beginning_and_resize(size_t off);
 };
 
-/* Following this is a number of specializations of the VmObject class */
+/* Following this is a number of specializations of the vm_object class */
 
-class VmObjectPhys : public VmObject
+class vm_object_phys : public vm_object
 {
-
+protected:
 public:
-	using VmObject::VmObject;
-	~VmObjectPhys()
+	using vm_object::vm_object;
+	~vm_object_phys() override;
+
+	int commit(size_t offset) override;
+	vm_object *create_hollow_copy()
 	{
-		lock.Lock();
-
-		for(auto it = page_list.begin(); it != page_list.end();)
-		{
-			auto t = it;
-			it++;
-	
-			struct page *page = *t;
-			page_list.Remove(page);
-			free_page(page);
-
-		}
-
-		lock.Unlock();
-	}
-
-	int Commit(size_t offset);
-	VmObject *CreateHollowCopy()
-	{
-		VmObjectPhys *p = new VmObjectPhys(should_demand_page, nr_pages, owner, (struct page *) nullptr);
+		vm_object_phys *p = new vm_object_phys(should_demand_page, nr_pages, owner);
 		return p;
 	}
 };
 
-class VmObjectMmio : public VmObject
+class vm_object_mmio : public vm_object
 {
-
+private:
+	struct page *pages;
 public:
-	using VmObject::VmObject;
-	~VmObjectMmio(){}
-	bool Init(unsigned long phys);
-	int Commit(size_t offset);
-	VmObject *CreateHollowCopy()
+	using vm_object::vm_object;
+	~vm_object_mmio() override
 	{
-		VmObjectMmio *mmio = new VmObjectMmio(should_demand_page, nr_pages, owner, (struct page *) nullptr);
+		delete[] pages;
+	}
+
+	bool init(unsigned long phys);
+	int commit(size_t offset) override;
+	
+	int populate(size_t starting_off, size_t region_size) override
+	{
+		/* vm_object_mmio regions don't need to be populated */
+		(void) starting_off;
+		(void) region_size;
+		return 0;
+	}
+
+	vm_object *create_hollow_copy()
+	{
+		vm_object_mmio *mmio = new vm_object_mmio(should_demand_page, nr_pages, owner);
 		return mmio;
 	}
 	

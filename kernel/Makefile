@@ -36,7 +36,7 @@ CFLAGS:=$(CFLAGS) -g -ffreestanding -fbuiltin -march=native -Wall -Wextra -Werro
 -Wno-unused-parameter -Wno-unused-function -static -fstack-protector-strong
 
 ifeq ($(CONFIG_RELOCATABLE), y)
-CFLAGS+=-fpie -DPIC -fno-plt -fno-jump-tables
+LDFLAGS:=-Wl,--emit-relocs -Wl,--discard-none
 endif
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)

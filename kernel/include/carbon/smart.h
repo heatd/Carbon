@@ -1,12 +1,14 @@
 /*
 * Copyright (c) 2017 Pedro Falcato
-* This file is part of Onyx, and is released under the terms of the MIT License
+* This file is part of Carbon, and is released under the terms of the MIT License
 * check LICENSE at the root directory for more information
 */
 #ifndef _SMART_KERNEL_H
 #define _SMART_KERNEL_H
 
 #include <assert.h>
+
+#include <carbon/remove_extent.h>
 
 template <typename T>
 class refcount
@@ -56,6 +58,7 @@ class smart_ptr
 {
 private:
 	refcount<T> *ref;
+	using element_type = remove_extent_t<T>;
 public:
 	smart_ptr() : ref(nullptr) {}
 	smart_ptr(T *data)
@@ -131,7 +134,12 @@ public:
 	{
 		return !operator==(ptr);
 	}
-	
+
+	element_type& operator[](size_t index)
+	{
+		return ref->data[index];
+	}
+
 	~smart_ptr(void)
 	{
 		/* Order this in order to be thread-safe */

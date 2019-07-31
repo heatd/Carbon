@@ -83,7 +83,7 @@ void stack_segment_fault(intctx_t *ctx)
 
 void general_protection_fault(intctx_t *ctx)
 {
-	printf("GPF at %lx\n", ctx->rip);
+	printf("GPF at %lx, rbp %lx\n", ctx->rip, ctx->rbp);
 	panic("General protection fault");
 }
 

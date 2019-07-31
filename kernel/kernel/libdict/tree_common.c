@@ -25,9 +25,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <libdict/tree_common.h>
 
 #include <string.h>
+
+#include <libdict/tree_common.h>
 #include "dict_private.h"
 
 typedef struct tree_node {

@@ -11,7 +11,7 @@
 
 void spin_lock(struct spinlock *lock)
 {
-	Scheduler::DisablePreemption();
+	scheduler::disable_preemption();
 	while(__sync_lock_test_and_set(&lock->lock, 1))
 	{
 		while(lock->lock == 1)
@@ -29,7 +29,7 @@ void spin_unlock(struct spinlock *lock)
 {
 	__sync_lock_release(&lock->lock);
 
-	Scheduler::EnablePreemption();
+	scheduler::enable_preemption();
 }
 
 void spin_unlock_irqrestore(struct spinlock *lock)

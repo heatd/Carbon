@@ -299,5 +299,5 @@ extern "C" void efi_entry(struct boot_info *info)
 	/* x86 initialization done, do the rest now */
 	kernel_init(info);
 
-	Scheduler::Block(get_current_thread());
+	scheduler::block(get_current_thread());
 }

@@ -300,7 +300,7 @@ bool Lapic::ApicTimerIrqEntry(Irq::IrqContext& context)
 {
 	add_per_cpu(apic_ticks, 1);
 
-	Scheduler::OnTick();
+	scheduler::on_tick();
 
 	if(get_cpu_nr() == 0)
 		Timer::HandlePendingTimerEvents();
@@ -518,7 +518,7 @@ void Boot(unsigned int cpu)
 
 	other_cpu_write(Smp::cpu_nr, cpu, cpu);
 
-	Scheduler::SetupCpu(cpu);
+	scheduler::setup_cpu(cpu);
 
 	s->thread_stack = (unsigned long) (get_current_for_cpu(cpu)->kernel_stack_top);
 	s->boot_done = false;
@@ -527,7 +527,7 @@ void Boot(unsigned int cpu)
 						    x86::Apic::IcrDeliveryMode::INIT, 0);
 	
 	/* Do a 10ms sleep */
-	Scheduler::Sleep(10);
+	scheduler::sleep(10);
 
 
 	get_per_cpu(x86::Apic::cpu_lapic)->SendSIPI(x86::Apic::lapic_ids[cpu],

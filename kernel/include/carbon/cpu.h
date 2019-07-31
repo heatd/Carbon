@@ -14,13 +14,13 @@
 
 #include <carbon/lock.h>
 
-namespace Scheduler
+namespace scheduler
 {
 
 struct thread;
 };
 
-using Scheduler::thread;
+using scheduler::thread;
 
 #define NR_PRIO		40
 

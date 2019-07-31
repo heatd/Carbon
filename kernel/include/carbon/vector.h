@@ -42,7 +42,7 @@ private:
 		return true;
 	}
 public:
-	constexpr vector() : data{}, buffer_size{0}, nr_elems{0}, log{0}
+	constexpr vector() : data{nullptr}, buffer_size{0}, nr_elems{0}, log{0}
 	{
 
 	}

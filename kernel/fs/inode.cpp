@@ -57,7 +57,7 @@ page_cache_block *inode::add_page(struct page *page, size_t size, size_t offset)
 
 page_cache_block *inode::do_caching(size_t off, long flags)
 {
-	struct page_cache_block *block = nullptr;
+	page_cache_block *block = nullptr;
 	/* Allocate a cache buffer */
 	struct page *p = alloc_pages(1, 0);
 	if(!p)
@@ -108,7 +108,7 @@ page_cache_block *inode::get_page_internal(size_t offset, long flags)
 	*/
 	
 	/* Try to add it to the cache if it didn't exist before. */
-	struct page_cache_block *block = do_caching(aligned_off, flags);
+	page_cache_block *block = do_caching(aligned_off, flags);
 
 	return block;
 }
@@ -169,7 +169,7 @@ ssize_t inode::read_page_cache(void *buffer, size_t len, size_t offset)
 	while(read != len)
 	{
 		page_cache_lock.Lock();
-		struct page_cache_block *cache = get_page_internal(offset, 0);
+		page_cache_block *cache = get_page_internal(offset, 0);
 
 		if(!cache)
 		{

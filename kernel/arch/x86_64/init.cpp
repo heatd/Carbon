@@ -58,7 +58,7 @@ void x86_init(struct boot_info *info)
 
 	Fpu::Init();
 
-	Scheduler::Initialize();
+	scheduler::initialize();
 
 	Acpi::Init();
 

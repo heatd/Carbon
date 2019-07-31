@@ -18,17 +18,19 @@
 #include <carbon/fpu.h>
 #include <carbon/mutex.h>
 #include <carbon/rwlock.h>
+#include <carbon/atomic.h>
 
 extern struct serial_port com1;
 void serial_write(const char *s, size_t size, struct serial_port *port);
 
-namespace Scheduler
+namespace scheduler
 {
 
-size_t thread_id = 0;
+atomic<size_t> thread_id{0};
+
 static bool scheduler_initialized = false;
 
-bool CreateFpuArea(struct thread *t)
+bool create_fpu_area(struct thread *t)
 {
 	if(t->flags & THREAD_FLAG_KERNEL)
 	{
@@ -43,7 +45,7 @@ bool CreateFpuArea(struct thread *t)
 	return true;
 }
 
-struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags)
+struct thread *create_thread(struct registers *regs, create_thread_flags flags)
 {
 	thread *t = new thread;
 	if(!t)
@@ -55,14 +57,14 @@ struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags)
 	t->status = THREAD_RUNNABLE;
 	t->priority = SCHED_PRIO_NORMAL;
 
-	if(!CreateFpuArea(t))
+	if(!create_fpu_area(t))
 	{
 		delete t;
 		return nullptr;
 	}
 
-	__sync_fetch_and_add(&t->thread_id, 1);
-	if(!ArchCreateThreadLowLevel(t, regs))
+	t->thread_id = thread_id++;
+	if(!arch_create_thread_low_level(t, regs))
 	{
 		if(t->fpu_area)
 			free(t->fpu_area);
@@ -73,7 +75,7 @@ struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags)
 	return t;
 }
 
-struct thread *CreateThread(ThreadCallback callback, void *context, CreateThreadFlags flags)
+struct thread *create_thread(thread_callback callback, void *context, create_thread_flags flags)
 {
 	thread *t = new thread;
 
@@ -85,14 +87,15 @@ struct thread *CreateThread(ThreadCallback callback, void *context, CreateThread
 	t->status = THREAD_RUNNABLE;
 	t->priority = SCHED_PRIO_NORMAL;
 
-	if(!CreateFpuArea(t))
+	if(!create_fpu_area(t))
 	{
 		delete t;
 		return nullptr;
 	}
 
-	__sync_fetch_and_add(&t->thread_id, 1);
-	if(!ArchCreateThread(t, callback, context, flags))
+	t->thread_id = thread_id++;
+
+	if(!arch_create_thread(t, callback, context, flags))
 	{
 		if(t->fpu_area)
 			free(t->fpu_area);
@@ -103,7 +106,7 @@ struct thread *CreateThread(ThreadCallback callback, void *context, CreateThread
 	return t;
 }
 
-inline unsigned long GetSchedQuantum()
+inline unsigned long get_sched_quantum()
 {
 	return 10;
 }
@@ -112,7 +115,7 @@ inline unsigned long GetSchedQuantum()
 volatile int __gdb_debug_counter = 0; \
 while(__gdb_debug_counter != 1)
 
-void IdleThread(void *context)
+void idle_thread(void *context)
 {
 	(void) context;
 
@@ -120,14 +123,14 @@ void IdleThread(void *context)
 		__asm__ __volatile__("hlt");
 }
 
-void InitializeIdleThread()
+void initialize_idle_thread()
 {
-	auto idle = CreateThread(IdleThread, nullptr, CREATE_THREAD_KERNEL);
+	auto idle = create_thread(idle_thread, nullptr, CREATE_THREAD_KERNEL);
 
 	assert(idle != nullptr);
 
 	idle->priority = SCHED_PRIO_VERY_LOW;
-	StartThread(idle, 0);
+	start_thread(idle, 0);
 }
 
 PER_CPU_VAR(struct thread *current_thread);
@@ -136,7 +139,7 @@ PER_CPU_VAR(unsigned long preemption_counter);
 PER_CPU_VAR(Spinlock scheduler_lock);
 PER_CPU_VAR(unsigned int cpu_load);
 
-void Initialize()
+void initialize()
 {
 	/* This should be ran with interrupts disabled */
 
@@ -151,20 +154,19 @@ void Initialize()
 	t->flags = THREAD_FLAG_KERNEL;
 	t->priority = SCHED_PRIO_NORMAL;
 
-	__sync_fetch_and_add(&t->thread_id, 1);
-
+	t->thread_id = thread_id++;
 	/* And set it */
 	write_per_cpu(current_thread, t);
-	write_per_cpu(sched_quantum, GetSchedQuantum());
+	write_per_cpu(sched_quantum, get_sched_quantum());
 	write_per_cpu(preemption_counter, 0);
 	add_per_cpu(cpu_load, 1);
 
 	scheduler_initialized = true;
 
-	InitializeIdleThread();
+	initialize_idle_thread();
 }
 
-void OnTick()
+void on_tick()
 {
 	add_per_cpu(sched_quantum, -1);
 
@@ -175,46 +177,46 @@ void OnTick()
 	}
 }
 
-bool IsPreemptionDisabled()
+bool is_preemption_disabled()
 {
 	return get_per_cpu(preemption_counter) > 0;
 }
 
-void DisablePreemptionForCpu(unsigned int cpu)
+void disable_preemption_for_cpu(unsigned int cpu)
 {
 	add_per_cpu_any(preemption_counter, 1, cpu);
 }
 
-void DisablePreemption()
+void disable_preemption()
 {
 	if(scheduler_initialized)
-		DisablePreemptionForCpu(get_cpu_nr());
+		disable_preemption_for_cpu(get_cpu_nr());
 }
 
-void EnablePreemptionForCpu(unsigned int cpu)
+void enable_preemption_for_cpu(unsigned int cpu)
 {
 	assert(get_per_cpu_any(preemption_counter, cpu) != 0);
 	add_per_cpu_any(preemption_counter, -1, cpu);
 }
 
-void EnablePreemption()
+void enable_preemption()
 {
 	if(scheduler_initialized)
-		EnablePreemptionForCpu(get_cpu_nr());
+		enable_preemption_for_cpu(get_cpu_nr());
 }
 
-void SaveThread(struct thread *thread, struct registers *regs)
+void save_thread(struct thread *thread, struct registers *regs)
 {
 	thread->kernel_stack = (unsigned long *) regs;
 	thread->thread_errno = errno;
 
-	ArchSaveThread(thread);
+	arch_save_thread(thread);
 }
 
 PER_CPU_VAR(struct thread *thread_queues_head[NR_PRIO]);
 PER_CPU_VAR(struct thread *thread_queues_tail[NR_PRIO]);
 
-void AppendThreadToQueue(struct thread *thread, unsigned int priority)
+void append_thread_to_queue(struct thread *thread, unsigned int priority)
 {
 	auto cpu = thread->cpu;
 	assert(get_per_cpu_ptr_any(scheduler_lock, cpu)->IsLocked() == true);
@@ -234,13 +236,13 @@ void AppendThreadToQueue(struct thread *thread, unsigned int priority)
 	}
 }
 
-struct thread *ScheduleThreadForCpu(struct thread *current)
+struct thread *schedule_thread_for_cpu(struct thread *current)
 {
 	scoped_spinlockIrqsave guard{get_per_cpu_ptr(scheduler_lock)};
 
 	if(current->status == THREAD_RUNNABLE)
 	{
-		AppendThreadToQueue(current, current->priority);
+		append_thread_to_queue(current, current->priority);
 	}
 
 	auto tq_head = (struct thread **) get_per_cpu_ptr_no_cast(thread_queues_head);
@@ -268,52 +270,52 @@ struct thread *ScheduleThreadForCpu(struct thread *current)
 	return nullptr;
 }
 
-struct thread *ScheduleThread(struct thread *current)
+struct thread *schedule_thread(struct thread *current)
 {
-	return ScheduleThreadForCpu(current);
+	return schedule_thread_for_cpu(current);
 }
 
-struct registers *Schedule(struct registers *regs)
+struct registers *schedule(struct registers *regs)
 {
 	auto current = get_current_thread();
-	SaveThread(current, regs);
+	save_thread(current, regs);
 
-	if(IsPreemptionDisabled())
+	if(is_preemption_disabled())
 	{
-		write_per_cpu(sched_quantum, GetSchedQuantum() / 2);
+		write_per_cpu(sched_quantum, get_sched_quantum() / 2);
 		return regs;
 	}
 
 	current->flags &= ~(THREAD_FLAG_NEEDS_RESCHED);
 
-	auto new_thread = ScheduleThread(current);
+	auto new_thread = schedule_thread(current);
 
 	write_per_cpu(current_thread, new_thread);
 	assert(new_thread->kernel_stack != nullptr);
 
-	write_per_cpu(sched_quantum, GetSchedQuantum());
+	write_per_cpu(sched_quantum, get_sched_quantum());
 
-	ArchLoadThread(new_thread);
+	arch_load_thread(new_thread);
 
 	return (struct registers *) new_thread->kernel_stack;
 }
 
 /* To use in ASM */
 extern "C"
-struct registers *schedule(struct registers *regs)
+struct registers *asm_schedule(struct registers *regs)
 {
-	return Schedule(regs);
+	return schedule(regs);
 }
 
-void SetThreadAsRunnable(struct thread *thread)
+void set_thread_as_runnable(struct thread *thread)
 {
 	thread->status = THREAD_RUNNABLE;
 
 	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
-	Scheduler::AppendThreadToQueue(thread, thread->priority);
+	scheduler::append_thread_to_queue(thread, thread->priority);
 }
 
-unsigned int AllocateCpu()
+unsigned int allocate_cpu()
 {
 	unsigned int min_load = UINT_MAX;
 	unsigned int target_cpu = 0;
@@ -336,28 +338,28 @@ unsigned int AllocateCpu()
 	return target_cpu;
 }
 
-void StartThread(struct thread *thread, unsigned int cpu)
+void start_thread(struct thread *thread, unsigned int cpu)
 {
 	if(cpu != (unsigned int) -1)
 		thread->cpu = cpu;
 	else
-		thread->cpu = Scheduler::AllocateCpu();
-	SetThreadAsRunnable(thread);
+		thread->cpu = scheduler::allocate_cpu();
+	set_thread_as_runnable(thread);
 }
 
 extern "C" void platform_yield();
-void Yield()
+void yield()
 {
 	platform_yield();
 }
 
-void Block(struct thread *t)
+void block(struct thread *t)
 {
 	t->status = THREAD_BLOCKED;
-	Yield();
+	yield();
 }
 
-void UnblockThread(struct thread *thread)
+void unblock_thread(struct thread *thread)
 {
 	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
 
@@ -375,28 +377,28 @@ void UnblockThread(struct thread *thread)
 	}
 	else
 	{
-		AppendThreadToQueue(thread, thread->priority);
+		append_thread_to_queue(thread, thread->priority);
 	}
 }
 
-void Sleep(ClockSource::ClockTicks ticks)
+void sleep(ClockSource::ClockTicks ticks)
 {
 	auto thread = get_current_thread();
 	Timer::TimerEvent wake_event(ticks, [] (void *context)
 	{
 		struct thread *thread = (struct thread *) context;
-		UnblockThread(thread);
+		unblock_thread(thread);
 	}
 	, (void *) thread, true);
 
 	Timer::AddTimerEvent(wake_event);
 
-	Block(thread);
+	block(thread);
 }
 
-void SetupCpu(unsigned int cpu)
+void setup_cpu(unsigned int cpu)
 {
-	auto thread = CreateThread(IdleThread, nullptr, CREATE_THREAD_KERNEL);
+	auto thread = create_thread(idle_thread, nullptr, CREATE_THREAD_KERNEL);
 	assert(thread != nullptr);
 	thread->cpu = cpu;
 	thread->priority = 0;
@@ -404,33 +406,34 @@ void SetupCpu(unsigned int cpu)
 	thread->status = THREAD_RUNNABLE;
 
 	write_per_cpu_any(current_thread, thread, cpu);
-	write_per_cpu_any(sched_quantum, GetSchedQuantum(), cpu);
+	write_per_cpu_any(sched_quantum, get_sched_quantum(), cpu);
 	write_per_cpu_any(preemption_counter, 0, cpu);
 }
 
 }
+
 void mutex_lock_slow_path(struct raw_mutex *mutex)
 {
 	spin_lock(&mutex->llock);
 
-	Scheduler::SetCurrentState(THREAD_BLOCKED);
+	scheduler::set_current_state(THREAD_BLOCKED);
 
 	while(!__sync_bool_compare_and_swap(&mutex->counter, 0, 1))
 	{
 		struct thread *thread = get_current_thread();
 
-		Scheduler::EnqueueThread(mutex, thread);
+		scheduler::enqueue_thread(mutex, thread);
 		
 		spin_unlock(&mutex->llock);
 
-		Scheduler::Yield();
+		scheduler::yield();
 
 		spin_lock(&mutex->llock);
 
-		Scheduler::SetCurrentState(THREAD_BLOCKED);
+		scheduler::set_current_state(THREAD_BLOCKED);
 	}
 
-	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+	scheduler::set_current_state(THREAD_RUNNABLE);
 
 	spin_unlock(&mutex->llock);
 
@@ -457,9 +460,9 @@ void mutex_unlock(struct raw_mutex *mtx)
 	if(mtx->head)
 	{
 		struct thread *t = mtx->head;
-		Scheduler::DequeueThread(mtx, mtx->head);
+		scheduler::dequeue_thread(mtx, mtx->head);
 
-		Scheduler::UnblockThread(t);
+		scheduler::unblock_thread(t);
 	}
 
 	spin_unlock(&mtx->llock);
@@ -494,24 +497,24 @@ void rw_lock::lock_read()
 {
 	llock.Lock();
 
-	Scheduler::SetCurrentState(THREAD_BLOCKED);
+	scheduler::set_current_state(THREAD_BLOCKED);
 
 	while(!trylock_read())
 	{
 		struct thread *thread = get_current_thread();
 
-		Scheduler::EnqueueThread(this, thread);
+		scheduler::enqueue_thread(this, thread);
 		
 		llock.Unlock();
 
-		Scheduler::Yield();
+		scheduler::yield();
 
 		llock.Lock();
 
-		Scheduler::SetCurrentState(THREAD_BLOCKED);
+		scheduler::set_current_state(THREAD_BLOCKED);
 	}
 
-	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+	scheduler::set_current_state(THREAD_RUNNABLE);
 
 	llock.Unlock();
 
@@ -522,39 +525,77 @@ void rw_lock::lock_write()
 {
 	llock.Lock();
 
-	Scheduler::SetCurrentState(THREAD_BLOCKED);
+	scheduler::set_current_state(THREAD_BLOCKED);
 
 	while(!trylock_write())
 	{
 		struct thread *thread = get_current_thread();
 
-		Scheduler::EnqueueThread(this, thread);
+		scheduler::enqueue_thread(this, thread);
 		
 		llock.Unlock();
 
-		Scheduler::Yield();
+		scheduler::yield();
 
 		llock.Lock();
 
-		Scheduler::SetCurrentState(THREAD_BLOCKED);
+		scheduler::set_current_state(THREAD_BLOCKED);
 	}
 
-	Scheduler::SetCurrentState(THREAD_RUNNABLE);
+	scheduler::set_current_state(THREAD_RUNNABLE);
 
 	llock.Unlock();
 
 	__sync_synchronize();
 }
 
+void rw_lock::wake_up_threads()
+{
+	llock.Lock();
+
+	while(head)
+	{
+		auto to_wake = head;
+		scheduler::dequeue_thread(this, head);
+
+		scheduler::unblock_thread(to_wake);
+	}
+
+	llock.Unlock();
+}
+
+void rw_lock::wake_up_thread()
+{
+	llock.Lock();
+
+	if(head)
+	{
+		auto to_wake = head;
+		scheduler::dequeue_thread(this, head);
+
+		scheduler::unblock_thread(to_wake);
+	}
+
+	llock.Unlock();
+}
+
 void rw_lock::unlock_read()
 {
-	__sync_sub_and_fetch(&counter, 1);
+	/* Implementation note: If we're unlocking a read lock, only wake up a
+	 * single thread, since the write lock is exclusive, like a mutex.
+	*/
+	if(__sync_sub_and_fetch(&counter, 1) == 0)
+		wake_up_thread();
 }
 
 void rw_lock::unlock_write()
 {
 	counter = 0;
 	__sync_synchronize();
+	/* Implementation note: If we're unlocking a write lock, wake up every single thread
+	 * because we can have both readers and writers waiting to get woken up.
+	*/
+	wake_up_threads();
 }
 
 #ifdef MUTEX_TEST
@@ -578,10 +619,10 @@ void mtx_test()
 	for(unsigned int i = 1; i < Smp::GetOnlineCpus(); i++)
 	{
 		printf("create thread %u\n", i);
-		auto t = Scheduler::CreateThread(mtx_thread2, (void *) (unsigned long) i,
-					 Scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
+		auto t = scheduler::create_thread(mtx_thread2, (void *) (unsigned long) i,
+					 scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
 		threads[i] = t;
-		Scheduler::StartThread(t, i);
+		scheduler::StartThread(t, i);
 	}
 
 	while(true)
@@ -617,10 +658,10 @@ void wq_test()
 	for(unsigned int i = 1; i < Smp::GetOnlineCpus(); i++)
 	{
 		printf("create thread %u\n", i);
-		auto t = Scheduler::CreateThread(wq_thread, (void *) (unsigned long) i,
-					 Scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
+		auto t = scheduler::create_thread(wq_thread, (void *) (unsigned long) i,
+					 scheduler::CreateThreadFlags::CREATE_THREAD_KERNEL);
 		threads[i] = t;
-		Scheduler::StartThread(t, i);
+		scheduler::StartThread(t, i);
 	}
 
 	while(true)

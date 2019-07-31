@@ -22,7 +22,7 @@ unsigned long IrqEntry(uint64_t irq_number, struct registers *regs)
 
 	auto thread = get_current_thread();
 	if(thread->flags & THREAD_FLAG_NEEDS_RESCHED)
-		context.registers = Scheduler::Schedule(context.registers);
+		context.registers = scheduler::schedule(context.registers);
 	/* char buf[100];
 	snprintf(buf, 100, "addr: %p\n", context.registers);
 	serial_write(buf, strlen(buf), &com1);*/

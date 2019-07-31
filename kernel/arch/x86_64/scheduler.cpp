@@ -14,13 +14,13 @@
 #include <carbon/x86/tss.h>
 PER_CPU_VAR(unsigned long kernel_stack) = 0;
 
-namespace Scheduler
+namespace scheduler
 {
 
 constexpr size_t kernel_stack_size = 0x2000;
 
-bool ArchCreateThread(struct thread *thread, ThreadCallback callback,
-		      void *context, CreateThreadFlags flags)
+bool arch_create_thread(struct thread *thread, thread_callback callback,
+		      void *context, create_thread_flags flags)
 {
 	unsigned int cs = 0x2b, ds = 0x33;
 
@@ -43,10 +43,10 @@ bool ArchCreateThread(struct thread *thread, ThreadCallback callback,
 	regs.cs = cs;
 	regs.ds = ds;
 
-	return ArchCreateThreadLowLevel(thread, &regs);
+	return arch_create_thread_low_level(thread, &regs);
 }
 
-bool ArchCreateThreadLowLevel(struct thread *thread, struct registers *regs)
+bool arch_create_thread_low_level(struct thread *thread, struct registers *regs)
 {
 	unsigned long *kernel_stack = (unsigned long *) Vm::mmap(&kernel_address_space, 0,
 				kernel_stack_size, VM_PROT_WRITE);
@@ -72,13 +72,13 @@ bool ArchCreateThreadLowLevel(struct thread *thread, struct registers *regs)
 	return true;
 }
 
-void ArchSaveThread(struct thread *thread)
+void arch_save_thread(struct thread *thread)
 {
 	if(!(thread->flags & THREAD_FLAG_KERNEL))
 		Fpu::SaveFpu(thread->fpu_area);
 }
 
-void ArchLoadThread(struct thread *thread)
+void arch_load_thread(struct thread *thread)
 {
 	write_per_cpu(kernel_stack, (unsigned long) thread->kernel_stack_top);
 

@@ -12,7 +12,7 @@
 #include <carbon/registers.h>
 #include <carbon/clocksource.h>
 
-namespace Scheduler
+namespace scheduler
 {
 
 #define THREAD_RUNNABLE		0
@@ -49,50 +49,50 @@ struct thread
 #define THREAD_FLAG_KERNEL		(1 << 0)
 #define THREAD_FLAG_NEEDS_RESCHED	(1 << 1)
 
-using ThreadCallback = void (*)(void *context);
+using thread_callback = void (*)(void *context);
 
-enum CreateThreadFlags : unsigned int
+enum create_thread_flags : unsigned int
 {
 	CREATE_THREAD_KERNEL = THREAD_FLAG_KERNEL
 };
 
-struct thread *CreateThread(ThreadCallback callback, void *context,
-			    CreateThreadFlags flags);
-struct thread *CreateThread(struct registers *regs, CreateThreadFlags flags);
-void StartThread(struct thread *thread, unsigned int cpu = -1);
+struct thread *create_thread(thread_callback callback, void *context,
+			    create_thread_flags flags);
+struct thread *create_thread(struct registers *regs, create_thread_flags flags);
+void start_thread(struct thread *thread, unsigned int cpu = -1);
 
-bool ArchCreateThread(struct thread *thread, ThreadCallback callback,
-		      void *context, CreateThreadFlags flags);
-bool ArchCreateThreadLowLevel(struct thread *thread, struct registers *regs);
+bool arch_create_thread(struct thread *thread, thread_callback callback,
+		      void *context, create_thread_flags flags);
+bool arch_create_thread_low_level(struct thread *thread, struct registers *regs);
 
 
-void ArchLoadThread(struct thread *thread);
+void arch_load_thread(struct thread *thread);
 
-void ArchSaveThread(struct thread *thread);
+void arch_save_thread(struct thread *thread);
 
-void OnTick();
+void on_tick();
 
-void Initialize();
+void initialize();
 
-struct registers *Schedule(struct registers *regs);
+struct registers *schedule(struct registers *regs);
 
-void DisablePreemption();
-void EnablePreemption();
+void disable_preemption();
+void enable_preemption();
 
-void Yield();
+void yield();
 
-void Sleep(ClockSource::ClockTicks ticks);
+void sleep(ClockSource::ClockTicks ticks);
 
-void SetupCpu(unsigned int cpu);
+void setup_cpu(unsigned int cpu);
 
-void UnblockThread(struct thread *thread);
+void unblock_thread(struct thread *thread);
 
-void Block(struct thread *t);
+void block(struct thread *t);
 
 extern struct thread *current_thread;
 
 template <typename T>
-void EnqueueThread(T *s, struct thread *thread)
+void enqueue_thread(T *s, struct thread *thread)
 {
 	if(!s->head)
 	{
@@ -109,7 +109,7 @@ void EnqueueThread(T *s, struct thread *thread)
 }
 
 template <typename T>
-void DequeueThread(T *s, struct thread *thread)
+void dequeue_thread(T *s, struct thread *thread)
 {
 	if(s->head == thread)
 	{
@@ -144,23 +144,23 @@ void DequeueThread(T *s, struct thread *thread)
 
 }
 
-using Scheduler::thread;
+using scheduler::thread;
 
 #include <carbon/percpu.h>
 
 inline struct thread *get_current_thread()
 {
-	return get_per_cpu(Scheduler::current_thread);
+	return get_per_cpu(scheduler::current_thread);
 }
 
 inline struct thread *get_current_for_cpu(unsigned int cpu)
 {
-	return other_cpu_get(Scheduler::current_thread, cpu);
+	return other_cpu_get(scheduler::current_thread, cpu);
 }
 
-namespace Scheduler
+namespace scheduler
 {
-	inline void SetCurrentState(unsigned int state)
+	inline void set_current_state(unsigned int state)
 	{
 		get_current_thread()->status = state;
 	}

@@ -134,12 +134,12 @@ void flush_main(void *context)
 
 void init()
 {
-	flush_thread = Scheduler::CreateThread(page_cache::flush_main,
+	flush_thread = scheduler::create_thread(page_cache::flush_main,
 					       nullptr,
-					       Scheduler::CREATE_THREAD_KERNEL);
+					       scheduler::CREATE_THREAD_KERNEL);
 	assert(flush_thread != nullptr);
 
-	Scheduler::StartThread(flush_thread);
+	scheduler::start_thread(flush_thread);
 }
 
 }

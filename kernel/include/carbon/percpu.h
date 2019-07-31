@@ -12,6 +12,8 @@ unsigned int get_cpu_nr();
 
 #define PER_CPU_VAR(var) __attribute__((section(".percpu"), used))	var
 
+#if 1
+
 #define get_per_cpu(var) 			\
 ({						\
 	unsigned long val;			\
@@ -114,6 +116,21 @@ unsigned int get_cpu_nr();
 	}						\
 })
 
+#else
+
+extern "C"
+unsigned long __raw_asm_get_per_cpu(size_t off, size_t size);
+extern "C"
+void __raw_asm_write_per_cpu(size_t off, unsigned long val, size_t size);
+extern "C"
+void __raw_asm_add_per_cpu(size_t off, unsigned long val, size_t size);
+
+#define get_per_cpu_no_cast(var)	__raw_asm_get_per_cpu((size_t) &var, sizeof(var))
+#define get_per_cpu(var)		((decltype(var)) __raw_asm_get_per_cpu((size_t) &var, sizeof(var)))
+#define write_per_cpu(var, val)			__raw_asm_write_per_cpu((size_t) &var, (unsigned long) val, sizeof(var))
+#define add_per_cpu(var, val)			__raw_asm_add_per_cpu((size_t) &var, (unsigned long) val, sizeof(var))
+
+#endif
 #ifdef __cplusplus
 namespace Percpu
 {

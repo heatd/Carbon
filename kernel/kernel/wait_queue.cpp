@@ -14,9 +14,9 @@ void WaitQueue::WakeUpUnlocked()
 	}
 		
 	auto thread = head;
-	Scheduler::DequeueThread(this, thread);
+	scheduler::dequeue_thread(this, thread);
 
-	Scheduler::UnblockThread(thread);
+	scheduler::unblock_thread(thread);
 }
 
 void WaitQueue::WakeUp()
@@ -37,12 +37,12 @@ void WaitQueue::WakeUpAll()
 
 void WaitQueue::Wait()
 {
-	Scheduler::EnqueueThread(this, get_current_thread());
-	Scheduler::SetCurrentState(THREAD_BLOCKED);
+	scheduler::enqueue_thread(this, get_current_thread());
+	scheduler::set_current_state(THREAD_BLOCKED);
 
 	ReleaseLock();
 
-	Scheduler::Yield();
+	scheduler::yield();
 
 	AcquireLock();
 }

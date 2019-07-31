@@ -14,6 +14,7 @@ SECTIONS
 	.boot :
 	{
 		*(.boot)
+		*(.boot_data)
 		. = ALIGN(4096);
 		pml4 = .;
 		. += 0x1000;
@@ -41,7 +42,7 @@ SECTIONS
 	. += VIRT_BASE;
 	.text ALIGN(0x1000) : AT(ADDR(.text) - VIRT_BASE)
 	{
-		*(.text)
+		*(.text*)
 		*(.gnu.linkonce.t*)
 		*(.init)
 		*(.fini)

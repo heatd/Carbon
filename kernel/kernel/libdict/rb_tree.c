@@ -54,14 +54,6 @@ struct rb_node {
 #define SET_BLACK(node)	    (node)->color |= ((intptr_t)RB_BLACK)
 #define SET_PARENT(node,p)  (node)->color = COLOR(node) | (intptr_t)(p)
 
-struct rb_tree {
-    TREE_FIELDS(rb_node);
-};
-
-struct rb_itor {
-    TREE_ITERATOR_FIELDS(rb_tree, rb_node);
-};
-
 static const dict_vtable rb_tree_vtable = {
     true,
     (dict_inew_func)	    rb_dict_itor_new,

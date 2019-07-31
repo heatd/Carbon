@@ -21,7 +21,6 @@ private:
 	inode* underlying_inode;
 	dentry* parent;
 	LinkedList <dentry* > children;
-	/* TODO: Use a rwlock */
 	rw_lock lock;
 	dentry* lookup_unlocked(const char *name);
 	dentry* open(const char *name);

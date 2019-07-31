@@ -69,17 +69,26 @@ calculate_base_address:
 	/* Get the first 4 bytes of entropy and use them to calculate the base address */
 	xor %rax, %rax
 	mov (%rdi), %rax
-
-#ifdef CONFIG_RELOCATABLE
+#define CONFIG_KASLR
+#define DEFAULT_VIRT		0xffffffff80000000
+#ifdef CONFIG_KASLR
 	and $((1 << ENTROPY_BITS) - 1), %rax
-	or $0xffffffff80000000, %rax
+	or $DEFAULT_VIRT, %rax
 	and $-0x1000000, %rax
 #else
-	mov $0xffffffff80000000, %rax
+	mov $DEFAULT_VIRT, %rax
 #endif
 
 	movq %rax, base_address
 	ret
+
+
+.macro FIXUP_SYMBOL sym, reg
+	mov $\sym, %\reg
+	sub $DEFAULT_VIRT, %\reg
+	add (base_address), %\reg
+.endm
+
 .global _start
 _start:
 	cli
@@ -94,6 +103,9 @@ _start:
 	push %rdi
 	push %rax
 
+	# Load a zero-sized IDT
+	lidt idt
+
 	call relocate_kernel
 	pop %rax
 	pop %rdi
@@ -102,13 +114,11 @@ _start:
 	mov $.higher, %rax
 	jmp *%rax
 .higher:
-	mov $stack_top, %rsp
-	
-	# Load a zero-sized IDT
-	lidt idt
+	FIXUP_SYMBOL stack_top, rsp
+
 	# And load the proper gdt
 
-	mov $gdtr, %rax
+	FIXUP_SYMBOL gdtr, rax
 	lgdt (%rax)
 
 	# Load segments and lret (retf) to flush the code segment
@@ -122,12 +132,11 @@ _start:
 
 	pushq $KERNEL_CS
 	mov $.cs_flush, %rax
-	add (base_address), %rax
 	pushq %rax
 
 	lretq
 .cs_flush:
-	mov $efi_entry, %rax
+	FIXUP_SYMBOL efi_entry, rax
 	call *%rax
 	cli
 .halt:

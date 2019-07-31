@@ -15,6 +15,9 @@
 
 class rw_lock
 {
+private:
+	void wake_up_threads();
+	void wake_up_thread();
 public:
 	thread *head, *tail;
 	Spinlock llock;

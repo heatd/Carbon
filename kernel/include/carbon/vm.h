@@ -29,14 +29,16 @@ extern struct address_space kernel_address_space;
 #define VM_PROT_EXEC		(1 << 1)
 #define VM_PROT_USER		(1 << 2)
 
-class VmObject;
+int vm_cmp(const void* k1, const void* k2);
+
+class vm_object;
 
 struct vm_region
 {
 	unsigned long start;
 	size_t size;
 	unsigned long perms;
-	VmObject *vmo;
+	vm_object *vmo;
 };
 
 void vm_init(void);
@@ -79,7 +81,7 @@ public:
 struct vm_region *AllocateRegionInternal(struct address_space *as, unsigned long min,
 					 size_t size);
 struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size_t size,
-			       unsigned long flags, VmObject *vmo);
+			       unsigned long flags, vm_object *vmo);
 void *mmap(struct address_space *as, unsigned long min, size_t size, unsigned long flags);
 void *MmioMap(struct address_space *as, unsigned long phys, unsigned long min,
 	      size_t size, unsigned long flags);

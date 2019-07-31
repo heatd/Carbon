@@ -30,9 +30,23 @@
 
 #include "dict.h"
 
+#include <libdict/tree_common.h>
 BEGIN_DECL
 
-typedef struct rb_tree rb_tree;
+typedef struct rb_node rb_node;
+
+typedef struct rb_tree {
+	TREE_FIELDS(rb_node);
+
+} rb_tree;
+
+typedef struct rb_itor {
+	TREE_ITERATOR_FIELDS(rb_tree, rb_node);
+
+#ifdef __cplusplus
+	rb_itor(rb_tree *__tree, rb_node *__node) : tree(__tree), node(__node) {}
+#endif
+} rb_itor;
 
 rb_tree*	rb_tree_new(dict_compare_func cmp_func);
 dict*		rb_dict_new(dict_compare_func cmp_func);
