@@ -69,7 +69,6 @@ calculate_base_address:
 	/* Get the first 4 bytes of entropy and use them to calculate the base address */
 	xor %rax, %rax
 	mov (%rdi), %rax
-#define CONFIG_KASLR
 #define DEFAULT_VIRT		0xffffffff80000000
 #ifdef CONFIG_KASLR
 	and $((1 << ENTROPY_BITS) - 1), %rax

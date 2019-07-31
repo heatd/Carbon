@@ -1,5 +1,7 @@
 ENTRY(_start)
 
+VIRT_BASE = 0xffffffff80000000;
+
 SECTIONS
 {
 	.multiboot : ALIGN(4k)
@@ -7,8 +9,8 @@ SECTIONS
 		*(.multiboot)
 	}
 	. = 0x100000;
-	kernel_start = .;
-	_text_start = .;
+	kernel_start = VIRT_BASE + .;
+	_text_start = . + VIRT_BASE;
 	.boot :
 	{
 		*(.boot)
@@ -26,7 +28,6 @@ SECTIONS
 		. += 0x1000;
 		. += 0x8000;
 	}
-
 	cpu_phys_base = .;
 	. = 0;
 
@@ -38,21 +39,19 @@ SECTIONS
 	}
 	
 	. += cpu_phys_base;
-
-	.text : ALIGN(0x1000)
+	. += VIRT_BASE;
+	.text ALIGN(0x1000) : AT(ADDR(.text) - VIRT_BASE)
 	{
 		*(.text*)
 		*(.gnu.linkonce.t*)
-		*(.bootstrap_stack)
 		*(.init)
 		*(.fini)
 		*(.jcr)
 		*(.dtors)
 		*(.ctors)
-		*vdso_helper.o(*.vdso)
 	}
-
-	.rodata : ALIGN(0x1000)
+	
+	.rodata ALIGN(0x1000) : AT(ADDR(.rodata) - VIRT_BASE)
 	{
 		*(.rodata*)
 		*(.gnu.linkonce.r*)
@@ -60,19 +59,17 @@ SECTIONS
 		*(.driver.init*)
 		_driver_init_end = .;
 	}
-
 	. = ALIGN(0x1000);
 
 	_text_end = .;
-
 	_data_start = .;
-	.data : ALIGN(0x1000)
+	.data ALIGN(0x1000) : AT(ADDR(.data) - VIRT_BASE)
 	{
 		*(.data)
 		*(.gnu.linkonce.d*)
 	}
 
-	.bss : ALIGN(0x1000)
+	.bss ALIGN(0x1000) : AT(ADDR(.bss) - VIRT_BASE)
 	{
 		*(COMMON)
 		*(.bss)
@@ -84,7 +81,7 @@ SECTIONS
 	. = ALIGN(0x1000);
 	_data_end = .;
 	_vdso_sect_start = .;
-	.vdso ALIGN(0x1000) : AT(ADDR(.vdso))
+	.vdso ALIGN(0x1000) : AT(ADDR(.vdso) - VIRT_BASE)
 	{
 		*vdso_helper.o(*.vdso)
 	}
