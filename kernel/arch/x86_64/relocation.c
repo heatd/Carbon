@@ -144,7 +144,7 @@ void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 	{
 		/* The symbol value we get is actually phys_addr + DEFAULT_VIRT_BASE
 		 * so to get the relocated symbol, we sub DEFAULT_VIRT_BASE and add base_address */
-		bool sym_is_higher = r->symbol_value > DEFAULT_VIRT_BASE;
+		bool sym_is_higher = r->symbol_value >= DEFAULT_VIRT_BASE;
 		if(sym_is_higher)
 			r->symbol_value = r->symbol_value - DEFAULT_VIRT_BASE + base_address;
 
@@ -158,9 +158,11 @@ void relocate_kernel(struct boot_info *info, uintptr_t base_address)
 		if(index >= sizeof(reloc_jmp_tab) / 8)
 			__asm__ __volatile__("hlt");
 		unsigned long addr = (unsigned long) r->address;
-		bool is_higher_half = addr > DEFAULT_VIRT_BASE;
-		unsigned long final_pc = is_higher_half ? addr - DEFAULT_VIRT_BASE + base_address : addr;
-		unsigned long pointer = is_higher_half ? addr - DEFAULT_VIRT_BASE : addr;
+		bool is_higher_half = addr >= DEFAULT_VIRT_BASE;
+		unsigned long final_pc = is_higher_half ?
+			addr - DEFAULT_VIRT_BASE + base_address : addr;
+		unsigned long pointer = is_higher_half ?
+			addr - DEFAULT_VIRT_BASE : addr;
 		reloc_jmp_tab[index](r->symbol_value, r->addend, final_pc, (void *) pointer);
 	}
 #endif

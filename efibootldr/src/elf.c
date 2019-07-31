@@ -111,85 +111,6 @@ Elf64_Sym *elf_get_sym_from_index(Elf64_Ehdr *hdr, size_t idx)
 
 EFI_SYSTEM_TABLE *get_system_table(void);
 
-struct serial_port
-{
-	uint16_t io_port;
-	int com_nr;
-};
-
-static inline void outb(uint16_t port, uint8_t val)
-{
-	__asm__ __volatile__ ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline void outw(uint16_t port, uint16_t val)
-{
-	__asm__ __volatile__ ("outw %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline void outl(uint16_t port, uint32_t val)
-{
-	__asm__ __volatile__ ("outl %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port)
-{
-	uint8_t ret;
-	__asm__ __volatile__ ( "inb %1, %0" : "=a"(ret) : "Nd"(port) );
-	return ret;
-}
-
-struct serial_port com1 = {.io_port = 0x3f8, .com_nr = 0};
-bool serial_is_transmit_empty(struct serial_port *port)
-{
-	return inb(port->io_port + 5) & 0x20;
-}
-
-bool serial_recieved(struct serial_port *port)
-{
-	return inb(port->io_port + 5) & 1;
-}
-
-static void write_byte(char c, struct serial_port *port)
-{
-	while(!serial_is_transmit_empty(port));
-
-	outb(port->io_port, c);
-	if(c == '\n')
-		write_byte('\r', port);
-}
-
-void serial_write(const char *s, size_t size, struct serial_port *port)
-{
-	for(size_t i = 0; i < size; i++)
-	{
-		write_byte(*(s + i), port);
-	}
-}
-
-void fark(char *s)
-{
-	serial_write(s, strlena(s), &com1);
-}
-
-static char read_byte(struct serial_port *port)
-{
-	while(!serial_recieved(port));
-
-	return inb(port->io_port);
-}
-
-void serial_port_init(struct serial_port *port)
-{
-	outb(port->io_port + 1, 0x00);    // Disable all interrupts
-	outb(port->io_port + 3, 0x80);    // Enable DLAB (set baud rate divisor)
-	outb(port->io_port + 0, 0x03);    // Set divisor to 3 (lo byte) 38400 baud
-	outb(port->io_port + 1, 0x00);    //                  (hi byte)
-	outb(port->io_port + 3, 0x03);    // 8 bits, no parity, one stop bit
-	outb(port->io_port + 2, 0xC7);    // Enable FIFO, clear them, with 14-byte threshold
-	outb(port->io_port + 4, 0x0B);    // IRQs enabled, RTS/DSR set
-}
-
 void elf_do_reloc(Elf64_Ehdr *header, Elf64_Rela *rela)
 {
 	size_t sym_idx = ELF64_R_SYM(rela->r_info);
@@ -247,16 +168,12 @@ bool section_should_relocate(Elf64_Shdr *target_section, Elf64_Shdr *shstr, Elf6
 		if(!__strcmp(should_not_reloc[i], section_name))
 			return false;
 	}
-	
-	serial_write("Relocating ", strlena("Relocating"), &com1);
-	serial_write(section_name, strlena(section_name), &com1);
-	serial_write("\n", 1, &com1);
+
 	return true;
 }
 
 void elf_parse_relocations(Elf64_Ehdr *hdr)
 {
-	serial_port_init(&com1);
 	Elf64_Shdr *tab = (Elf64_Shdr*)((char*) hdr + hdr->e_shoff);
 	size_t nr_entries = hdr->e_shnum;
 	Elf64_Shdr *shstr = &tab[hdr->e_shstrndx];

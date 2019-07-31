@@ -118,6 +118,10 @@ _start:
 	# And load the proper gdt
 
 	FIXUP_SYMBOL gdtr, rax
+
+	# But first, fix it up with the proper address
+	FIXUP_SYMBOL bsp_gdt, rbx
+	mov %rbx, 2(%rax)
 	lgdt (%rax)
 
 	# Load segments and lret (retf) to flush the code segment
