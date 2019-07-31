@@ -15,13 +15,6 @@
 
 void initrd_init(struct module *mod);
 
-class dummy_ko : public refcountable
-{
-public:
-	dummy_ko() : refcountable{} {};
-	~dummy_ko() {};
-};
-
 int kernel_init(struct boot_info *info)
 {
 	page_cache::init();
