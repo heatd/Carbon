@@ -14,6 +14,7 @@
 #include <carbon/console.h>
 #include <carbon/memory.h>
 #include <carbon/lock.h>
+#include <carbon/utf8.h>
 
 struct color
 {
@@ -61,14 +62,8 @@ static void draw_char(uint32_t c, unsigned int x, unsigned int y,
 {
 	struct font *font = get_font_data();
 	volatile char *buffer = (volatile char *) fb->framebuffer;
-	static void *framebuffer = fb->framebuffer;
-
-
-	if(fb->framebuffer != framebuffer)
-	{
-		while(1);
-	}
-
+	if(c > font->chars)
+		c = 0x7f;
 	buffer += y * fb->pitch + x * (fb->bpp / 8);
 
 	for(int i = 0; i < 16; i++)
@@ -139,7 +134,7 @@ void vterm_scroll(struct framebuffer *fb, struct vterm *vt)
 	vt->has_scrolled = true;
 }
 
-void vterm_set_char(char c, unsigned int x, unsigned int y, struct color fg,
+void vterm_set_char(uint32_t c, unsigned int x, unsigned int y, struct color fg,
 	struct color bg, struct vterm *vterm)
 {
 	struct console_cell *cell = &vterm->cells[y * vterm->columns + x];
@@ -163,7 +158,7 @@ inline void do_newline(struct vterm *vt)
 	vt->cursor_y++;
 }
 
-void vterm_putc(char c, struct vterm *vt)
+void vterm_putc(uint32_t c, struct vterm *vt)
 {
 	struct framebuffer *fb = vt->fb;
 
@@ -249,10 +244,17 @@ ssize_t vterm_write(const void *buffer, size_t len, struct console *c)
 	struct vterm *vt = (struct vterm *) c->priv;
 
 	scoped_spinlock guard{&vt->vterm_lock};
-
-	for(size_t i = 0; i != len; str++, written++, len--)
+	size_t i = 0;
+	while(i < len)
 	{
-		vterm_putc(*str, vt);
+		size_t codepoint_length;
+		utf32_t codepoint = utf8to32((const utf8_t *) str, len - i, &codepoint_length);
+		if(codepoint == UTF_INVALID_CODEPOINT)
+			codepoint = 0x7f;
+		vterm_putc(codepoint, vt);
+		str += codepoint_length;
+		written += codepoint_length;
+		i += codepoint_length;
 	}
 	
 	if(vt->has_scrolled)

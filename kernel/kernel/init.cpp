@@ -12,6 +12,7 @@
 #include <carbon/fs/vfs.h>
 #include <carbon/rwlock.h>
 #include <carbon/handle_table.h>
+#include <carbon/utf8.h>
 
 void initrd_init(struct module *mod);
 
@@ -23,9 +24,6 @@ int kernel_init(struct boot_info *info)
 
 	info->modules->start += PHYS_BASE;
 	initrd_init(info->modules);
-
-	auto rootfs = get_root()->get_inode()->i_fs;
-	(void) rootfs;
 
 	return 0;
 }
