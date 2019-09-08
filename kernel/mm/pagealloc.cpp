@@ -20,10 +20,11 @@
 #include <carbon/memory.h>
 #include <carbon/vm.h>
 #include <carbon/panic.h>
+#include <carbon/atomic.h>
 
 size_t page_memory_size;
 size_t nr_global_pages;
-static size_t used_pages = 0;
+static atomic<size_t> used_pages{0};
 
 #define min(t1, t2) (t1 < t2 ? t1 : t2)
 
@@ -162,7 +163,7 @@ struct page *page_alloc(size_t nr_pages, unsigned long flags)
 			continue;
 		if((pages = page_alloc_from_arena(nr_pages, flags, arena)) != NULL)
 		{
-			__sync_add_and_fetch(&used_pages, nr_pages);
+			used_pages.add_fetch(nr_pages);
 			return pages;
 		}
 	}
@@ -242,7 +243,7 @@ void page_free(size_t nr_pages, void *addr)
 			(uintptr_t) arena->end_arena > (uintptr_t) addr)
 		{
 			page_free_pages(arena, addr, nr_pages);
-			__sync_sub_and_fetch(&used_pages, nr_pages);;
+			used_pages.sub_fetch(nr_pages);
 		}
 	}
 }

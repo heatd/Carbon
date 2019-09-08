@@ -63,6 +63,11 @@ public:
 		return phys_to_virt(page->paddr);
 	}
 
+	struct page *get_page()
+	{
+		return page;
+	}
+
 	/* flush - flushes the page */
 	int flush();
 

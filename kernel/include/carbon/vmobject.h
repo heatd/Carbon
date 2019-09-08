@@ -31,11 +31,10 @@ protected:
 	struct rb_tree page_list;
 	bool should_demand_page;
 
-	int add_page(size_t page_off, struct page *page);
-	struct page *remove_page(size_t page_off);
 	void purge_pages(size_t lower_bound, size_t upper_bound, unsigned int flags, vm_object *second = nullptr);
 	void update_offsets(size_t old_off);
 	void destroy_tree(void (*func)(void *key, void *data));
+	struct page *get_may_commit_unlocked(size_t off);
 public:
 	Spinlock lock;
 	static constexpr bool is_refcountable = true;
@@ -70,6 +69,13 @@ public:
 	vm_object *split(size_t split_point, size_t hole_size);
 	void sanity_check();
 	void truncate_beginning_and_resize(size_t off);
+	size_t write(size_t offset, const void *src, size_t size);
+	size_t read(size_t offset, void *dst, size_t size);
+	size_t set_mem(size_t offset, uint8_t pattern, size_t size);
+
+	/* add_page and remove_page are dangerous, beware! */
+	int add_page(size_t page_off, struct page *page);
+	struct page *remove_page(size_t page_off);
 };
 
 /* Following this is a number of specializations of the vm_object class */

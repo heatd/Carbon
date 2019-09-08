@@ -7,8 +7,6 @@
 #ifndef _CARBON_H
 #define _CARBON_H
 
-#include <carbon/bare_handle.h>
-
 #define container_of(ptr, type, member)	\
 ((type *) ((char*) ptr - offsetof(type, member)))
 

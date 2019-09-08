@@ -26,6 +26,7 @@ extern "C" int *__errno_location()
 namespace Percpu
 {
 
+bool percpu_init = false;
 unsigned long *percpu_bases = nullptr;
 unsigned long nr_bases = 0;
 
@@ -53,6 +54,7 @@ void Init()
 	assert(get_per_cpu(__cpu_base) == (unsigned long) buffer);
 
 	AddPercpu((unsigned long) buffer);
+	percpu_init = true;
 }
 
 unsigned long InitForCpu(unsigned int cpu)
@@ -67,6 +69,11 @@ unsigned long InitForCpu(unsigned int cpu)
 	other_cpu_write(__cpu_base, (unsigned long) buffer, cpu);
 
 	return (unsigned long) buffer;
+}
+
+bool percpu_initialized()
+{
+	return percpu_init;
 }
 
 }

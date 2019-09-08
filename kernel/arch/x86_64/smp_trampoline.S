@@ -94,8 +94,8 @@ _long_mode:
 	lidt (idt)
 	mov $(thread_stack - _start_smp), %rbx
 	mov (%rbx), %rsp
-	.global boot_x86_address_space
-	mov $boot_x86_address_space, %rbx
+	.global boot_pml4
+	mov $boot_pml4, %rbx
 	mov (%rbx), %rax
 	mov %rax, %cr3
 

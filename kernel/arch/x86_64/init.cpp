@@ -49,9 +49,6 @@ void x86_init(struct boot_info *info)
 	asan_init();
 #endif
 
-	/* Invoke global constructors */
-	_init();
-
 	Percpu::Init();
 
 	Gdt::InitPercpu();
@@ -59,6 +56,9 @@ void x86_init(struct boot_info *info)
 	Fpu::Init();
 
 	scheduler::initialize();
+
+	/* Invoke global constructors */
+	_init();
 
 	Acpi::Init();
 

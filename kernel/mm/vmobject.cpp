@@ -64,6 +64,8 @@ struct page *vm_object::get(size_t offset)
 {
 	lock.Lock();
 
+	assert((offset & (PAGE_SIZE - 1)) == 0);
+
 	void **pp = rb_tree_search(&page_list, (const void *) offset);
 
 	return pp ? (struct page *) *pp : (lock.Unlock(), nullptr);
@@ -284,4 +286,107 @@ vm_object_phys::~vm_object_phys()
 	{
 		free_page((struct page *) data);
 	});
+}
+
+struct page *vm_object::get_may_commit_unlocked(size_t off)
+{
+	auto p = get(off);
+	if(!p)
+	{
+		if(commit(off) < 0)
+			return nullptr;
+		return get(off);
+	}
+
+	return p;
+}
+
+size_t vm_object::write(size_t offset, const void *src, size_t size)
+{
+	size_t written = 0;
+
+	const uint8_t *s = (const uint8_t *) src;
+
+	while(size != 0)
+	{
+		size_t misalignment = offset & (PAGE_SIZE - 1);
+
+		auto page = get_may_commit_unlocked(offset - misalignment);
+		if(!page)
+		{
+			lock.Unlock();
+			return written ? written : -1;
+		}
+
+		size_t to_write = PAGE_SIZE - misalignment < size ? PAGE_SIZE - misalignment : size;
+		unsigned long paddr = (unsigned long) page->paddr + misalignment;
+		memcpy(phys_to_virt(paddr), s, to_write);
+
+		written += to_write;
+		s += to_write;
+		offset += to_write;
+		size -= to_write;
+		lock.Unlock();
+	}
+
+	return written;
+}
+
+size_t vm_object::set_mem(size_t offset, uint8_t pattern, size_t size)
+{
+	size_t written = 0;
+
+	while(size != 0)
+	{
+		size_t misalignment = offset & (PAGE_SIZE - 1);
+
+		auto page = get_may_commit_unlocked(offset - misalignment);
+		if(!page)
+		{
+			lock.Unlock();
+			return written ? written : -1;
+		}
+
+		size_t to_write = PAGE_SIZE - misalignment < size ? PAGE_SIZE - misalignment : size;
+		unsigned long paddr = (unsigned long) page->paddr + misalignment;
+		memset(phys_to_virt(paddr), pattern, to_write);
+
+		written += to_write;
+		offset += to_write;
+		size -= to_write;
+		lock.Unlock();
+	}
+
+	return written;
+}
+
+size_t vm_object::read(size_t offset, void *dst, size_t size)
+{
+	size_t been_read = 0;
+
+	uint8_t *d = (uint8_t *) dst;
+
+	while(size != 0)
+	{
+		size_t misalignment = offset & (PAGE_SIZE - 1);
+
+		auto page = get_may_commit_unlocked(offset - misalignment);
+		if(!page)
+		{
+			lock.Unlock();
+			return been_read ? been_read : -1;
+		}
+
+		size_t to_read = PAGE_SIZE - misalignment < size ? PAGE_SIZE - misalignment : size;
+		unsigned long paddr = (unsigned long) page->paddr + misalignment;
+		memcpy(d, phys_to_virt(paddr), to_read);
+
+		been_read += to_read;
+		d += to_read;
+		offset += to_read;
+		size -= to_read;
+		lock.Unlock();
+	}
+
+	return been_read;
 }

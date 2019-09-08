@@ -38,9 +38,11 @@ bool create_fpu_area(struct thread *t)
 		return true;
 	}
 
-	/* We need to use posix_memalign here because of the alignment requirement */
-	if(!posix_memalign((void**) &t->fpu_area, FPU_AREA_ALIGNMENT, FPU_AREA_SIZE))
+	/* We need to use memalign here because of the alignment requirement */
+	auto fpu_area = (unsigned char *) memalign(FPU_AREA_ALIGNMENT, FPU_AREA_SIZE);
+	if(!(t->fpu_area = fpu_area))
 		return false;
+	memset(fpu_area, 0, FPU_AREA_SIZE);
 
 	return true;
 }
@@ -54,7 +56,7 @@ struct thread *create_thread(struct registers *regs, create_thread_flags flags)
 	memset(t, 0, sizeof(*t));
 
 	t->flags = flags;
-	t->status = THREAD_RUNNABLE;
+	t->status = THREAD_BLOCKED;
 	t->priority = SCHED_PRIO_NORMAL;
 
 	if(!create_fpu_area(t))
@@ -84,7 +86,7 @@ struct thread *create_thread(thread_callback callback, void *context, create_thr
 
 	memset(t, 0, sizeof(*t));
 	t->flags = flags;
-	t->status = THREAD_RUNNABLE;
+	t->status = THREAD_BLOCKED;
 	t->priority = SCHED_PRIO_NORMAL;
 
 	if(!create_fpu_area(t))
@@ -238,7 +240,7 @@ void append_thread_to_queue(struct thread *thread, unsigned int priority)
 
 struct thread *schedule_thread_for_cpu(struct thread *current)
 {
-	scoped_spinlockIrqsave guard{get_per_cpu_ptr(scheduler_lock)};
+	scoped_spinlock_irqsave guard{get_per_cpu_ptr(scheduler_lock)};
 
 	if(current->status == THREAD_RUNNABLE)
 	{
@@ -311,8 +313,17 @@ void set_thread_as_runnable(struct thread *thread)
 {
 	thread->status = THREAD_RUNNABLE;
 
-	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
+	scoped_spinlock_irqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
 	scheduler::append_thread_to_queue(thread, thread->priority);
+}
+
+struct registers *thread::get_registers()
+{
+	/* Inspecting a running/runnable thread's status is incorrect */
+	assert(status != THREAD_RUNNABLE);
+
+	/* TODO: This is at least true for x86, maybe not for other archs? */
+	return (struct registers *) kernel_stack;
 }
 
 unsigned int allocate_cpu()
@@ -361,7 +372,7 @@ void block(struct thread *t)
 
 void unblock_thread(struct thread *thread)
 {
-	scoped_spinlockIrqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
+	scoped_spinlock_irqsave guard {get_per_cpu_ptr_any(scheduler_lock, thread->cpu)};
 
 	auto cpu = thread->cpu;
 

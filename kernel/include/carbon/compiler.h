@@ -13,6 +13,7 @@
 #define unlikely(x)    __builtin_expect(!!(x), 0)
 #define prefetch(...) __builtin_prefetch(__VA_ARGS__)
 #define ASSUME_ALIGNED(x,y) __builtin_assume_aligned(x,y)
+#define ilog2(X) ((unsigned) (8*sizeof (unsigned long long) - __builtin_clzll((X)) - 1))
 
 #define __STRINGIFY(x) #x
 #define STRINGIFY(x) __STRINGIFY(x)

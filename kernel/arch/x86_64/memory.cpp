@@ -115,13 +115,7 @@ static inline uint64_t make_pml1e(uint64_t base,
   		p);
 }
 
-struct x86_address_space
-{
-	PML *pml;
-};
-
 PML *boot_pml4;
-struct x86_address_space boot_x86_address_space;
 
 static PML pdptphysical_map __attribute__((aligned(4096)));
 static PML pdphysical_map __attribute__((aligned(4096)));
@@ -203,7 +197,7 @@ void x86_setup_early_physical_mappings(void)
 	/* Get the current PML and store it */
 	__asm__ __volatile__("movq %%cr3, %%rax\t\nmovq %%rax, %0":"=r"(boot_pml4));
 
-	boot_x86_address_space.pml = boot_pml4;
+	kernel_address_space.arch_priv = (PML *) boot_pml4;
 	uintptr_t virt = PHYS_BASE;
 	assert(((virt >> 12) >> 18 & 0x1ff) == 0);
 
@@ -284,11 +278,12 @@ void x86_setup_physical_mappings()
 	}
 }
 
-void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
+void *__map_phys_to_virt(void *addr, uintptr_t virt, uintptr_t phys,
 	unsigned long prot)
 {
-	struct x86_address_space *aspace = (struct x86_address_space *) addr;
- 
+	PML *pml4 = (PML *) addr;
+	assert(pml4 != nullptr);
+
 	const unsigned int paging_levels = 4;
 	unsigned int indices[paging_levels];
 
@@ -297,7 +292,7 @@ void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 	bool is_global = !is_user;
 	bool is_nx = !(prot & VM_PROT_EXEC);
 
-	if(!is_nx && is_write)
+	if(0 && !is_nx && is_write)
 	{
 		printf("map_phys_to_virt: Error: mapping of %lx"
 		" at %lx violates W^X\n", phys, virt);
@@ -309,7 +304,7 @@ void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 		indices[i] = (virt >> 12) >> (i * 9) & 0x1ff;
 	}
 
-	PML *pml = (PML*)((uint64_t) aspace->pml + PHYS_BASE);
+	PML *pml = (PML*)(phys_to_virt(pml4));
 	
 	for(unsigned int i = paging_levels; i != 1; i--)
 	{
@@ -347,15 +342,10 @@ void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
 	return (void*) virt;
 }
 
-HANDLE get_x86_address_space_handle(void)
-{
-	return &boot_x86_address_space;
-}
-
 void *map_phys_to_virt(uintptr_t virt, uintptr_t phys, unsigned long prot)
 {
-	HANDLE addr = get_x86_address_space_handle();
-	return __map_phys_to_virt(addr, virt, phys, prot);
+	auto addr_space = Vm::get_current_address_space();
+	return __map_phys_to_virt(addr_space->arch_priv, virt, phys, prot);
 }
 
 void flush_tlb(void *addr, size_t nr_pages)
@@ -379,10 +369,8 @@ bool pml_is_empty(PML *pml)
 	return true;
 }
 
-void __unmap_page(struct x86_address_space *as, void *addr)
-{
-	struct x86_address_space *aspace = (struct x86_address_space *) as;
- 
+void __unmap_page(PML *__pml4, void *addr)
+{ 
 	const unsigned int paging_levels = 4;
 	unsigned int indices[paging_levels];
 	unsigned long virt = (unsigned long) addr;
@@ -394,7 +382,7 @@ void __unmap_page(struct x86_address_space *as, void *addr)
 
 	unsigned long entry = 0;
 
-	PML *pml4 = (PML*) phys_to_virt(aspace->pml);
+	PML *pml4 = (PML*) phys_to_virt(__pml4);
 
 	entry = pml4->entries[indices[3]];
 
@@ -460,7 +448,7 @@ void unmap_page_range(void *as, void *addr, size_t len)
 	while(nr_pgs--)
 	{
 		/* TODO: Connect this up */
-		__unmap_page(&boot_x86_address_space, (void *) a);
+		__unmap_page(NULL, (void *) a);
 		a += PAGE_SIZE;
 	}
 
@@ -507,8 +495,7 @@ void paging_protect_kernel(void)
 	p->entries[511] = 0UL;
 	p->entries[0] = 0UL;
 
-	boot_x86_address_space.pml = pml;
-
+	kernel_address_space.arch_priv = pml;
 	size_t size = (uintptr_t) &_text_end - text_start;
 	map_phys_to_virt_pgs(text_start, (text_start - base_address),
 		size, VM_PROT_EXEC);
@@ -521,5 +508,19 @@ void paging_protect_kernel(void)
 	map_phys_to_virt_pgs(vdso_start, (vdso_start - base_address),
 		size, VM_PROT_WRITE);
 
-	__asm__ __volatile__("movq %0, %%cr3"::"r"(pml));
+	__asm__ __volatile__("movq %0, %%cr3" :: "r"(pml));
+}
+
+#define PML_KERNEL_HALF_START		256
+void *vm_create_page_tables()
+{
+	struct page *pml4_page = alloc_pages(1, 0);
+	if(!pml4_page)
+		return nullptr;
+	PML *p = (PML*) phys_to_virt(pml4_page->paddr);
+	memcpy(&p->entries[PML_KERNEL_HALF_START],
+		phys_to_virt(&boot_pml4->entries[PML_KERNEL_HALF_START]),
+		256 * sizeof(uint64_t));
+
+	return pml4_page->paddr;  
 }

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <carbon/panic.h>
 #include <carbon/vm.h>
 #include <carbon/lock.h>
 #include <carbon/memory.h>
@@ -37,8 +38,6 @@ void heap_set_start(uintptr_t heap_start)
 
 int kasan_alloc_shadow(unsigned long addr, size_t size, bool accessible);
 
-extern "C"
-void panic(char *);
 void *expand_heap(size_t size)
 {
 	size_t nr_pages = (size >> PAGE_SHIFT) + 3;

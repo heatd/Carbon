@@ -22,7 +22,7 @@ namespace fs
 dentry *open_direntry(const char *path, open_flags flags, dentry *base)
 {
 	char *saveptr;
-	smart_ptr<char> to_traverse(strdup(path));
+	shared_ptr<char> to_traverse(strdup(path));
 
 	if(!to_traverse)
 		return errno = ENOMEM, nullptr;
@@ -134,6 +134,11 @@ inode* create(const char *path, mode_t mode, inode* ino)
 inode *mkdir(const char *path, mode_t mode, inode *ino)
 {
 	return create(path, mode | S_IFDIR, ino);
+}
+
+void close(inode *ino)
+{
+	ino->close();
 }
 
 }

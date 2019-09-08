@@ -12,6 +12,9 @@
 
 #include <carbon/fpu.h>
 #include <carbon/x86/tss.h>
+#include <carbon/memory.h>
+#include <carbon/x86/vm.h>
+
 PER_CPU_VAR(unsigned long kernel_stack) = 0;
 
 namespace scheduler
@@ -36,8 +39,8 @@ bool arch_create_thread(struct thread *thread, thread_callback callback,
 	}
 	else
 	{
-		/* TODO: Allocate user stack */
-		panic("Add user stack allocation");
+		void *user_stack = vm_allocate_region(&kernel_address_space, 0, 0x2000);
+		regs.rsp = (unsigned long) user_stack + 0x2000;
 	}
 
 	regs.cs = cs;
@@ -85,7 +88,10 @@ void arch_load_thread(struct thread *thread)
 	Tss::SetKernelStack((unsigned long) thread->kernel_stack_top);
 
 	if(!(thread->flags & THREAD_FLAG_KERNEL))
+	{
 		Fpu::RestoreFpu(thread->fpu_area);
+		vm::switch_address_space(thread->owner->address_space.arch_priv);
+	}
 }
 
 };

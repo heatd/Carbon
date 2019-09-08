@@ -12,6 +12,8 @@
 #include <carbon/registers.h>
 #include <carbon/clocksource.h>
 
+class process;
+
 namespace scheduler
 {
 
@@ -40,10 +42,13 @@ struct thread
 	unsigned char *fpu_area;
 	struct thread *prev, *next;
 	struct thread *wait_prev, *wait_next;
+	process *owner;
 #ifdef __x86_64__
 	unsigned long fs;
 	unsigned long gs;
 #endif
+
+	struct registers *get_registers();
 };
 
 #define THREAD_FLAG_KERNEL		(1 << 0)

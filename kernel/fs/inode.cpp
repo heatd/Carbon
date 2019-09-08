@@ -9,6 +9,7 @@
 #include <carbon/inode.h>
 #include <carbon/memory.h>
 #include <carbon/page.h>
+#include <carbon/vmobject.h>
 
 ssize_t inode::read(void *buffer, size_t size, size_t off)
 {
@@ -30,16 +31,27 @@ inode *inode::create(const char *name, mode_t mode)
 	return errno = ENOSYS, nullptr;
 }
 
+bool inode::create_vmobject_if_needed()
+{
+	if(i_pages)
+		return true;
+
+	if(!(i_pages = new vm_object_phys(true, i_size, nullptr)))
+		return false;
+
+	return true;
+}
+
 page_cache_block *inode::add_page(struct page *page, size_t size, size_t offset)
 {
+	if(!create_vmobject_if_needed())
+		return nullptr;
 	page_cache_block *block = new page_cache_block(page, size, offset, this);
 	if(!block)
 		return nullptr;
-	
-	/* Add to the hashtable first so we have a faster removal time in
-	 * the case that something fails
-	*/
-	if(!i_pages.add_element(block))
+
+	page->misc_data.cache_block = block;
+	if(i_pages->add_page(offset, page) < 0)
 	{
 		delete block;
 		return nullptr;
@@ -47,7 +59,7 @@ page_cache_block *inode::add_page(struct page *page, size_t size, size_t offset)
 
 	if(!page_cache::append_page_cache_block(block))
 	{
-		i_pages.remove_element(block);
+		i_pages->remove_page(offset);
 		delete block;
 		return nullptr;
 	}
@@ -78,7 +90,6 @@ page_cache_block *inode::do_caching(size_t off, long flags)
 
 	/* Add the cache block */
 	block = add_page(p, (size_t) size, off);
-
 	/* Now the block might be added, return. We don't need to check for
 	 * null
 	*/
@@ -88,29 +99,21 @@ page_cache_block *inode::do_caching(size_t off, long flags)
 page_cache_block *inode::get_page_internal(size_t offset, long flags)
 {
 	size_t aligned_off = (offset / PAGE_SIZE) * PAGE_SIZE;
-	auto hash = fnv_hash(&aligned_off, sizeof(offset));
+	if(!create_vmobject_if_needed())
+		return nullptr;
 
-	auto it = i_pages.get_hash_list_begin(hash);
-	auto end = i_pages.get_hash_list_end(hash);
-	/* Note: This should run with the pages_lock held */
-	for(; it != end; it++)
+	auto b = i_pages->get(aligned_off);
+
+	if(b)
 	{
-		auto b = *it;
-		if(b->get_offset() <= offset && b->get_offset() + (off_t) PAGE_SIZE > offset)
-		{
-			return b;
-		}
+		i_pages->lock.Unlock();
+		return b->misc_data.cache_block;
 	}
 
-	/* We don't release the lock if we didn't find anything on purpose.
-	 * That job is left to inode_get_page, which does that work for non-inode
-	 * code callers.
-	*/
-	
 	/* Try to add it to the cache if it didn't exist before. */
-	page_cache_block *block = do_caching(aligned_off, flags);
+	auto new_block = do_caching(aligned_off, flags);
 
-	return block;
+	return new_block;
 }
 
 ssize_t inode::write_page_cache(const void *buffer, size_t len, size_t offset)
@@ -121,7 +124,7 @@ ssize_t inode::write_page_cache(const void *buffer, size_t len, size_t offset)
 	{
 		page_cache_lock.Lock();
 
-		auto *cache = get_page_internal(offset, FILE_CACHING_WRITING);
+		auto cache = get_page_internal(offset, FILE_CACHING_WRITING);
 
 		if(cache == nullptr)
 		{
@@ -204,5 +207,6 @@ ssize_t inode::read_page_cache(void *buffer, size_t len, size_t offset)
 
 		page_cache_lock.Unlock();
 	}
+
 	return (ssize_t) read;
 }

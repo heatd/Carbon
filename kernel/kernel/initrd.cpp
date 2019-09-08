@@ -130,7 +130,7 @@ void initrd_mount(void)
 	
 			char *buffer = (char *) header + 512;
 			size_t size = tar_get_size(header->size);
-			assert(fs::write(buffer, size, 0, file) != -1);
+			assert(fs::write(buffer, size, 0, file) > 0);
 		}
 		else if(header->typeflag == TAR_TYPE_DIR)
 		{

@@ -1,5 +1,5 @@
 PROJECTS:=efibootldr libc kernel
-SOURCE_PACKAGES:=
+SOURCE_PACKAGES:= init
 
 ALL_MODULES:=$(PROJECTS) $(SOURCE_PACKAGES)
 
@@ -43,7 +43,10 @@ build-prep:
 	cd kernel && ../scripts/config_to_header.py include/carbon/config.h && \
 	../scripts/driver-build.py build
 
-install-packages: $(PROJECTS)
+install-basic-packages: $(PROJECTS)
+
+install-packages: install-basic-packages
+	$(MAKE) -C $(SOURCE_PACKAGES) install
 
 efibootldr: install-headers
 	$(MAKE) -C $@ install
@@ -54,9 +57,6 @@ kernel: install-headers
 	$(MAKE) -C $@ install
 
 libc: install-headers
-	$(MAKE) -C $@ install
-
-$(SOURCE_PACKAGES): install-packages
 	$(MAKE) -C $@ install
 
 install-headers: build-prep
@@ -73,9 +73,7 @@ build-cleanup: install-packages
 fullbuild: build-cleanup
 
 iso: fullbuild
-	cd sysroot && tar cvf ../initrd.tar * && cd ..
-	./scripts/make_efi_iso.sh
-	rm initrd.tar
+	./make_iso.sh
 
 qemu: iso
 	qemu-system-$(shell ./target-triplet-to-arch.sh $(HOST)) \

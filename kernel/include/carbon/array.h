@@ -28,6 +28,13 @@ public:
 		return data[index];
 	}
 
+	constexpr const T& operator[](unsigned long index) const
+	{
+		if(index >= nr_elem)
+			panic_bounds_check(this, false, index);
+		return (const T&) data[index];
+	}
+
 	unsigned long size() const
 	{
 		return nr_elem;

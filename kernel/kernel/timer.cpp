@@ -16,7 +16,7 @@ static Spinlock list_lock;
 
 bool AddTimerEvent(TimerEvent& event)
 {
-	scoped_spinlockIrqsave guard {&list_lock};
+	scoped_spinlock_irqsave guard {&list_lock};
 	TimerEvent *ev = new TimerEvent(event);
 	if(!ev)
 		return false;
@@ -44,7 +44,7 @@ void HandleRunningEvent(TimerEvent *event, LinkedListIterator<TimerEvent *> it)
 
 void HandlePendingTimerEvents()
 {
-	scoped_spinlockIrqsave guard {&list_lock};
+	scoped_spinlock_irqsave guard {&list_lock};
 	for(auto it = pending_list.begin();
 	    it != pending_list.end(); )
 	{

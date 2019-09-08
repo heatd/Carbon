@@ -13,6 +13,8 @@
 
 #define PAGE_FLAG_DONT_FREE		(1 << 0)
 
+class page_cache_block;
+
 struct page
 {
 	void *paddr;
@@ -26,6 +28,12 @@ struct page
 		struct page *next_allocation;
 		struct page *next_virtual_region;
 	} next_un;
+
+	union
+	{
+		page_cache_block *cache_block;
+		void *misc;
+	} misc_data;
 };
 
 
@@ -50,7 +58,7 @@ void page_init(size_t memory_size, void *(*get_phys_mem_region)(uintptr_t *base,
 	uintptr_t *size, void *context), struct boot_info *info);
 
 void *map_phys_to_virt(uintptr_t virt, uintptr_t phys, unsigned long prot);
-void *__map_phys_to_virt(HANDLE addr, uintptr_t virt, uintptr_t phys,
+void *__map_phys_to_virt(void *priv, uintptr_t virt, uintptr_t phys,
 	unsigned long prot);
 
 void *map_pages(void *addr, unsigned long prot, unsigned int nr_pages);

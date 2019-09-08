@@ -32,7 +32,7 @@ int vm_cmp(const void* k1, const void* k2)
 struct vm_region *vm_reserve_region(struct address_space *as,
 				    unsigned long start, size_t size)
 {
-	struct vm_region *region = (struct vm_region *) malloc(sizeof(*region));
+	struct vm_region *region = (struct vm_region *) zalloc(sizeof(*region));
 
 	if(!region)
 		return NULL;
@@ -169,7 +169,7 @@ void vm_assign_vmo(struct vm_region *region, vm_object *vmo)
 	region->vmo = vmo;
 }
 
-int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
+int vm_update_mapping(struct address_space *as, struct vm_region *region, size_t off, size_t len)
 {
 	size_t nr_pages = size_to_pages(len);
 	unsigned long start = region->start + off;
@@ -180,7 +180,8 @@ int vm_update_mapping(struct vm_region *region, size_t off, size_t len)
 
 		assert(p != nullptr);
 
-		if(!map_phys_to_virt(start + off, (unsigned long) p->paddr, region->perms))
+		if(!__map_phys_to_virt(as->arch_priv, start + off,
+				       (unsigned long) p->paddr, region->perms))
 		{
 			region->vmo->lock.Unlock();
 			return -1;
@@ -281,13 +282,12 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 
 enum VmFaultStatus VmFault::Handle()
 {
-	/* TODO: Remove this. */
-	/* TODO: Don't assume we're holding the lock */
-	if(kernel_address_space.lock.IsLocked())
+	auto address_space = Vm::get_current_address_space();
+	if(address_space->lock.IsLocked())
 		return VmFaultStatus::VM_SEGFAULT;
 
-	scoped_spinlock l(&kernel_address_space.lock);
-	auto region = FindRegion((void *) fault_address, kernel_address_space.area_tree);
+	scoped_spinlock l{&address_space->lock};
+	auto region = FindRegion((void *) fault_address, address_space->area_tree);
 
 	if(!region)
 		return VmFaultStatus::VM_SEGFAULT;
@@ -296,6 +296,7 @@ enum VmFaultStatus VmFault::Handle()
 
 	if((region->perms & perms) != perms)
 	{
+		printf("bad perms\n");
 		/* Oh oh, the perms have been violated, segfault */
 		return VmFaultStatus::VM_SEGFAULT;
 	}
@@ -334,7 +335,7 @@ struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size
 		return nullptr;
 	}
 
-	if(vm_update_mapping(reg, 0, size) < 0)
+	if(vm_update_mapping(as, reg, 0, size) < 0)
 	{
 		vm_destroy_region(as, reg);
 		return nullptr;
@@ -494,5 +495,39 @@ void ForEveryRegion(struct address_space *as, bool (*func)(struct vm_region *reg
 {
 	rb_tree_traverse(as->area_tree, ForEveryRegionVisit, (void *) func);
 }
+
+void *allocate_stack(struct address_space *as, size_t size, unsigned long flags)
+{
+	/* Infer if it's a user stack from the prots */
+	unsigned long min = (flags & VM_PROT_USER) ? (unsigned long) vm::limits::user_stack_min : 0;
+	auto mem = Vm::mmap(as, min, size, flags);
+	if(!mem)
+		return nullptr;
+	return (void *)((char *) mem + size);
+}
 /* TODO: Implement mprotect */
+
+void *map_file(struct address_space *as, void *addr_hint,
+		      unsigned long flags, unsigned long prot,
+		      size_t size, size_t off, inode *ino)
+{
+	bool is_fixed = flags == MAP_FILE_FIXED;
+	struct vm_region *region = nullptr;
+
+	if(is_fixed)
+	{
+		region = vm_reserve_region(as, (unsigned long) addr_hint, size);
+		if(!region)
+			return nullptr;
+	}
+	else
+		panic("implement");
+	
+	region->perms = prot;
+	region->off = off;
+	region->vmo = ino->i_pages;
+
+	return (void *) region->start;
+}
+
 }

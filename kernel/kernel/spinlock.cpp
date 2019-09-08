@@ -27,6 +27,7 @@ void spin_lock_irqsave(struct spinlock *lock)
 
 void spin_unlock(struct spinlock *lock)
 {
+	assert(lock->lock != 0);
 	__sync_lock_release(&lock->lock);
 
 	scheduler::enable_preemption();

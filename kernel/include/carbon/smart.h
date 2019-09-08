@@ -54,30 +54,30 @@ public:
 };
 
 template <typename T>
-class smart_ptr
+class shared_ptr
 {
 private:
 	refcount<T> *ref;
 	using element_type = remove_extent_t<T>;
 public:
-	smart_ptr() : ref(nullptr) {}
-	smart_ptr(T *data)
+	shared_ptr() : ref(nullptr) {}
+	shared_ptr(T *data)
 	{
 		ref = new refcount<T>(data);
 	}
 
-	smart_ptr(const smart_ptr<T>& ptr)
+	shared_ptr(const shared_ptr<T>& ptr)
 	{
 		ptr.ref->refer();
 		ref = ptr.ref;
 	}
 
-	smart_ptr(smart_ptr<T>&& ptr) : ref(ptr.ref)
+	shared_ptr(shared_ptr<T>&& ptr) : ref(ptr.ref)
 	{
 		ptr.ref = nullptr;
 	}
 
-	smart_ptr& operator=(smart_ptr<T>&& ptr)
+	shared_ptr& operator=(shared_ptr<T>&& ptr)
 	{
 		if(ref)
 		{
@@ -91,7 +91,7 @@ public:
 		return *this;
 	}
 
-	smart_ptr& operator=(const smart_ptr& p)
+	shared_ptr& operator=(const shared_ptr& p)
 	{
 		if(ref == p.ref)
 			goto ret;
@@ -110,7 +110,7 @@ public:
 		return *this;
 	}
 
-	bool operator==(const smart_ptr& p)
+	bool operator==(const shared_ptr& p)
 	{
 		return (p.ref == ref);
 	}
@@ -125,7 +125,7 @@ public:
 		return (ref->get_data() == ptr);
 	}
 
-	bool operator!=(const smart_ptr& p)
+	bool operator!=(const shared_ptr& p)
 	{
 		return !operator==(p);
 	}
@@ -140,7 +140,7 @@ public:
 		return ref->data[index];
 	}
 
-	~smart_ptr(void)
+	~shared_ptr(void)
 	{
 		/* Order this in order to be thread-safe */
 		auto r = ref;
@@ -190,28 +190,137 @@ public:
 	}
 };
 
-namespace smartptr
+template <typename T>
+class unique_ptr
 {
+private:
+	T *p;
+	using element_type = remove_extent_t<T>;
+public:
+	unique_ptr() : p(nullptr) {}
+	unique_ptr(T *data) : p(data)
+	{
+	}
+
+	unique_ptr(const unique_ptr<T>& ptr) = delete;
+
+	unique_ptr(unique_ptr<T>&& ptr) : p(ptr.p)
+	{
+		ptr.p = nullptr;
+	}
+
+	unique_ptr& operator=(unique_ptr<T>&& ptr)
+	{
+		if(p)
+		{
+			delete p;
+		}
+
+		this->p = ptr.p;
+
+		return *this;
+	}
+
+	unique_ptr& operator=(const unique_ptr& p)
+	{
+		if(this->p == p.p)
+	ret:
+		return *this;
+	}
+
+	bool operator==(const unique_ptr& p)
+	{
+		return (p == p.p);
+	}
+
+	bool operator==(const T *ptr)
+	{	
+		return (p == ptr);
+	}
+
+	bool operator!=(const unique_ptr& p)
+	{
+		return !operator==(p);
+	}
+
+	bool operator!=(const T *ptr)
+	{
+		return !operator==(ptr);
+	}
+
+	element_type& operator[](size_t index)
+	{
+		return p[index];
+	}
+
+	T *release()
+	{
+		auto ret = p;
+		p = nullptr;
+		return p;
+	}
+
+	~unique_ptr(void)
+	{
+		if(p)
+			delete p;
+	}
+
+	T* get_data()
+	{
+		return p;
+	}
+
+	T& operator*()
+	{
+		return *get_data();
+	}
+	
+	T* operator->()
+	{
+		return get_data();
+	}
+
+	bool operator!()
+	{
+		return get_data() == nullptr;
+	}
+	
+	operator bool()
+	{
+		return get_data() != nullptr;
+	}
+};
 
 template <typename T, class ... Args>
-smart_ptr<T> make(Args && ... args)
+shared_ptr<T> make_shared(Args && ... args)
 {
 	T *data = new T(args...);
 	if(!data)
 		return nullptr;
 
-	smart_ptr<T> p(data);
+	shared_ptr<T> p(data);
 	return p;
 }
 
 template <typename T, typename U>
-smart_ptr<T> cast(const smart_ptr<U>& s)
+shared_ptr<T> cast(const shared_ptr<U>& s)
 {
 	auto ref = s.__get_refc();
-	smart_ptr<T> p{};
+	shared_ptr<T> p{};
 	p.__set_refc((refcount<T> *) ref);
 	return p;
 }
 
-};
+template <typename T, class ... Args>
+unique_ptr<T> make_unique(Args && ... args)
+{
+	T *data = new T(args...);
+	if(!data)
+		return nullptr;
+
+	unique_ptr<T> p(data);
+	return p;
+}
+
 #endif

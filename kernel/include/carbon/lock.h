@@ -79,7 +79,7 @@ public:
 };
 
 using scoped_spinlock = scoped_lock<Spinlock>;
-using scoped_spinlockIrqsave = scoped_lock<Spinlock, true>;
+using scoped_spinlock_irqsave = scoped_lock<Spinlock, true>;
 
 #endif
 

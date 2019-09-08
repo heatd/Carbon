@@ -11,15 +11,13 @@
 
 #include <carbon/lock.h>
 
-struct rb_tree;
+#ifdef __x86_64__
+#include <carbon/x86/vm.h>
+#endif
 
-struct address_space
-{
-	unsigned long start;
-	unsigned long end;
-	struct rb_tree *area_tree;
-	Spinlock lock;
-};
+#include <carbon/address_space.h>
+#include <carbon/process.h>
+
 
 extern struct address_space kernel_address_space;
 
@@ -39,6 +37,7 @@ struct vm_region
 	size_t size;
 	unsigned long perms;
 	vm_object *vmo;
+	unsigned long off;
 };
 
 void vm_init(void);
@@ -89,7 +88,35 @@ int munmap(struct address_space *as, void *addr, size_t size);
 
 void ForEveryRegion(struct address_space *as, bool (*)(struct vm_region *region));
 
+void *allocate_stack(struct address_space *as, size_t size, unsigned long flags);
+
+inline struct address_space *get_current_address_space()
+{
+	if(unlikely(!Percpu::percpu_initialized()))
+		return kernel_as;
+	auto p = get_current_process();
+	if(likely(p))
+		return &p->address_space;
+	else
+	{
+		return kernel_as;
+	}
+}
+
+struct vm_region *FindRegion(void *addr, rb_tree *tree);
+
+#define MAP_FILE_FIXED		(1 << 0)
+#define MAP_FILE_SHARED		(1 << 1)
+#define MAP_FILE_PRIVATE	(1 << 2)
+
+void *map_file(struct address_space *as, void *addr_hint,
+		      unsigned long flags, unsigned long prot,
+		      size_t size, size_t off, inode *ino);
+
 };
+
+void *vm_create_page_tables();
+
 #ifdef __x86_64__
 #define PAGE_SIZE 4096
 #define PAGE_SHIFT 12

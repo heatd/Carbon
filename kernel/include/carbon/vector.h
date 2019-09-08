@@ -11,8 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <carbon/compiler.h>
 #include <carbon/array_iterator.h>
 #include <carbon/panic.h>
+#include <carbon/new.h>
+#include <stdio.h>
 
 template <typename T>
 class vector
@@ -25,7 +28,10 @@ private:
 
 	void setup_expansion(size_t new_nr_elems)
 	{
-		memset(&data[nr_elems], 0, new_nr_elems - nr_elems);
+		for(size_t i = nr_elems; i < new_nr_elems - nr_elems; i++)
+		{
+			new (data + i) T{};
+		}
 	}
 
 	bool expand_vec()
@@ -46,6 +52,26 @@ public:
 	constexpr vector() : data{nullptr}, buffer_size{0}, nr_elems{0}, log{0}
 	{
 
+	}
+
+	bool alloc_buf(size_t size)
+	{
+		auto old_log = log;
+		auto _log = ilog2(size);
+		if(size & ((1 << _log) - 1))
+			_log++;
+		
+		assert(nr_elems <= size);
+
+		log = _log;
+		if(!expand_vec())
+		{
+			/* Revert */
+			log = old_log;
+			return false;
+		}
+
+		return true;
 	}
 
 	bool push_back(T& obj)
@@ -105,6 +131,11 @@ public:
 		return buffer_size;
 	}
 
+	void set_nr_elems(size_t nr)
+	{
+		nr_elems = nr;
+	}
+
 	array_iterator<T> begin()
 	{
 		return array_iterator<T>{data};
@@ -117,12 +148,22 @@ public:
 
 	const_array_iterator<T> cbegin()
 	{
-		return array_iterator<T>{data};
+		return const_array_iterator<T>{data};
 	}
 
 	const_array_iterator<T> cend()
 	{
-		return array_iterator<T>{&data[nr_elems]};
+		return const_array_iterator<T>{&data[nr_elems]};
+	}
+
+	T *get_buf()
+	{
+		return data;
+	}
+
+	const T *get_buf() const
+	{
+		return data;
 	}
 };
 

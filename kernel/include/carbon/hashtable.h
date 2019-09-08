@@ -9,6 +9,9 @@
 
 #include <carbon/list.h>
 
+namespace cul
+{
+
 template <typename T, size_t number_entries,
 	typename hash_type, hash_type (*hash_func)(T& data)>
 class hashtable
@@ -80,6 +83,8 @@ public:
 
 		return remove_element(elem, hash, buckets[index].begin());
 	}
+};
+
 };
 
 #endif

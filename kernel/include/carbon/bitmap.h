@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include <carbon/lock.h>
 #include <carbon/conditional.h>

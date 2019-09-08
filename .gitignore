@@ -12,3 +12,5 @@ sysroot
 *.sha256sum
 *.a
 *.so
+initrd.tar*
+init/init

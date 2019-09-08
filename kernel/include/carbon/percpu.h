@@ -138,6 +138,7 @@ namespace Percpu
 extern unsigned long *percpu_bases;
 void Init();
 unsigned long InitForCpu(unsigned int cpu);
+bool percpu_initialized();
 
 };
 

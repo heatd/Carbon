@@ -47,3 +47,13 @@ bool platform_page_is_used(void *page)
 
 	return false;
 }
+
+namespace vm
+{
+
+void switch_address_space(void *pml)
+{
+	__asm__ __volatile__("mov %0, %%cr3" :: "r"(pml));
+}
+
+}

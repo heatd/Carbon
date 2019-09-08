@@ -24,7 +24,7 @@ protected:
 	const char *name;
 	unsigned long ref;
 	dentry* root_dentry;
-	hashtable<inode *, 1024, fnv_hash_t, inode_hash> inode_table;
+	cul::hashtable<inode *, 1024, fnv_hash_t, inode_hash> inode_table;
 	Spinlock ino_table_lock{};
 public:
 	filesystem(const char *name, dentry *root) : name(name), ref(0),

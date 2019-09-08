@@ -12,7 +12,7 @@
 #include <carbon/fs/vfs.h>
 #include <carbon/rwlock.h>
 #include <carbon/handle_table.h>
-#include <carbon/utf8.h>
+#include <carbon/process.h>
 
 void initrd_init(struct module *mod);
 
@@ -25,5 +25,14 @@ int kernel_init(struct boot_info *info)
 	info->modules->start += PHYS_BASE;
 	initrd_init(info->modules);
 
+	shared_ptr<process_namespace> first_namespace = make_shared<process_namespace>(0);
+	cbn_status_t st;
+	printf("Creating\n");
+	auto p = process::kernel_spawn_process_helper("init", "/sbin/init",
+				PROCESS_SPAWN_FLAG_CREATE_THREAD | PROCESS_SPAWN_FLAG_START,
+				first_namespace, st);
+	if(!p)
+		printf("Failed with status %i\n", st);
+	
 	return 0;
 }
