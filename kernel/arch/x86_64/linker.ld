@@ -58,6 +58,9 @@ SECTIONS
 		_driver_init_start = .;
 		*(.driver.init*)
 		_driver_init_end = .;
+		_ehtable_start = .;
+		*(.ehtable*)
+		_ehtable_end = .;
 	}
 	. = ALIGN(0x1000);
 

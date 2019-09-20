@@ -30,6 +30,7 @@ private:
 	const char *name;
 	shared_ptr<process_namespace> pnamespace;
 	cbn_pid_t pid;
+	handle_table process_handle_table{};
 public:
 	struct address_space address_space;
 
@@ -49,6 +50,7 @@ public:
 		shared_ptr<process_namespace> proc_namespace, cbn_status_t& out_status);
 	static process *kernel_spawn_process_helper(const char *name, const char *path,
 			unsigned long flags, shared_ptr<process_namespace> proc_namespace,
+			int argc, char **argv, int envc, char **envp,
 			cbn_status_t& out);
 	thread *create_thread(scheduler::thread_callback entry, void *arg, void *user_stack,
 			      cbn_status_t& out_status);
@@ -57,6 +59,12 @@ public:
 	size_t write_memory(void *address, void *src, size_t len, cbn_status_t& out_status);
 	size_t read_memory(void *address, void *dest, size_t len, cbn_status_t& out_status);
 	size_t set_memory(void *address, uint8_t pattern, size_t len, cbn_status_t& out_status);
+	void exit(int exit_code);
+
+	handle_table& get_handle_table()
+	{
+		return process_handle_table;
+	}
 };
 
 

@@ -16,4 +16,6 @@
 #define USER_DS		0x30
 #define TSS_SEGMENT	0x38
 
+#define X86_USER_MODE_FLAG	3
+
 #endif

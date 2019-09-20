@@ -45,7 +45,10 @@ build-prep:
 
 install-basic-packages: $(PROJECTS)
 
-install-packages: install-basic-packages
+musl-libc: kernel
+	$(MAKE) -C musl install
+
+install-packages: install-basic-packages musl-libc
 	$(MAKE) -C $(SOURCE_PACKAGES) install
 
 efibootldr: install-headers

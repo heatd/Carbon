@@ -11,6 +11,7 @@
 unsigned int get_cpu_nr();
 
 #define PER_CPU_VAR(var) __attribute__((section(".percpu"), used))	var
+#define PER_CPU_VAR_NOUNUSED(var) var __attribute__((section(".percpu")))
 
 #if 1
 

@@ -11,6 +11,8 @@
 #include <carbon/vm.h>
 #include <carbon/vmobject.h>
 #include <carbon/loader.h>
+#include <carbon/process_args.h>
+#include <carbon/syscall_utils.h>
 
 #include <libdict/rb_tree.h>
 
@@ -211,9 +213,16 @@ size_t process::write_memory(void *address, void *src, size_t len, cbn_status_t&
 			out_status = CBN_STATUS_SEGFAULT;
 			return written ? written : (-1);
 		}
+
+		if(!(region->perms & VM_PROT_WRITE))
+		{
+			out_status = CBN_STATUS_SEGFAULT;
+			return written ? written : (-1);
+		} 
 	
 		size_t to_write = len < region->size ? len : region->size;
 		auto region_offset = a - region->start;
+		
 		region->vmo->write(region->off + region_offset, s, to_write);
 		written += to_write;
 		a += to_write;
@@ -269,6 +278,7 @@ size_t process::read_memory(void *address, void *dest, size_t len, cbn_status_t&
 	
 		size_t to_read = len < region->size ? len : region->size;
 		auto region_offset = a - region->start;
+
 		region->vmo->read(region->off + region_offset, d, to_read);
 		been_read += to_read;
 		a += to_read;
@@ -325,23 +335,186 @@ process::~process()
 
 process *process::kernel_spawn_process_helper(const char *name, const char *path,
 			unsigned long flags, shared_ptr<process_namespace> proc_namespace,
+			int argc, char **argv, int envc, char **envp,
 			cbn_status_t& out)
 {
 	auto p = spawn(name, flags, proc_namespace, out);
 	if(!p)
 		return nullptr;
 	
+	process_args args{p, argc, argv, envc, envp, 0, nullptr};
+
 	program_loader::binary_info info;
+	info.args = &args;
+
 	auto st = p->load_binary(path, info);
 
 	if(st != CBN_STATUS_OK)
 		printf("Failure: Status %i\n", st);
+
 	printf("Entry: %p\n", info.entry);
 	auto ustack = Vm::allocate_stack(&p->address_space, (size_t) vm::defaults::user_stack_size,
 		VM_PROT_WRITE | VM_PROT_USER);
 	assert(ustack != nullptr);
-	auto thread = p->create_thread((scheduler::thread_callback) info.entry, NULL, ustack, st);
+
+	args.set_ustack_top(ustack);
+	assert(args.copy_to_stack() != false);
+
+	auto thread = p->create_thread((scheduler::thread_callback) info.entry, NULL,
+					args.get_ustack_pointer_base(), st);
 	scheduler::start_thread(thread);
 
 	return p;
+}
+
+process_args::process_args(process *process, int argc, char **kargv, int envc, char **kenvp,
+	unsigned long kbinargsize, void *kbinargv) : argc(argc), kargv(kargv), envc(envc), kenvp(kenvp),
+	kbin_args(kbinargv), kbinargsize(kbinargsize), ustack_top(nullptr), ustack_pointer(nullptr),
+	ustack_pointer_base(nullptr), proc{process}
+{
+
+}
+
+size_t process_args::string_array_len(int count, char **arg)
+{
+	size_t len = 0;
+	for(int i = 0; i < count; i++)
+	{
+		len += strlen(arg[i]) + 1;
+	}
+
+	return len;
+}
+
+bool process_args::copy_strings_and_put_in_array(char *&string_space, char **kargs, char **uargs, int count)
+{
+	/* TODO: Implement this */
+	for(int i = 0; i < count; i++)
+	{
+		size_t sz = strlen(kargs[i] + 1);
+		cbn_status_t st = CBN_STATUS_OK;
+		proc->write_memory(string_space, kargs[i], sz, st);
+
+		if(st != CBN_STATUS_OK)
+			return false;
+		
+		proc->write_memory(uargs, &string_space, sizeof(char **), st);
+		if(st != CBN_STATUS_OK)
+			return false;
+
+		string_space += sz;
+		uargs++;
+	}
+
+	char *null_pointer = NULL;
+	cbn_status_t st = CBN_STATUS_OK;
+	proc->write_memory(uargs, &null_pointer, sizeof(null_pointer), st);
+	return true;
+}
+
+bool process_args::copy_args()
+{
+	char *string_space = ustack_pointer_base +
+		sizeof(unsigned long) + (argc + 1) * sizeof(uintptr_t) + (envc + 1) * sizeof(uintptr_t);
+	char **argv_space = (char **) (ustack_pointer_base + sizeof(unsigned long));
+	// TODO: Not finished
+
+	cbn_status_t s = CBN_STATUS_OK;
+	proc->write_memory(ustack_pointer_base, &argc, sizeof(unsigned long), s);
+
+	if(s != CBN_STATUS_OK)
+		return false;
+
+	bool st = copy_strings_and_put_in_array(string_space, kargv, argv_space, argc);
+	if(!st)
+		return false;
+	ustack_pointer = string_space;
+	return true;
+}
+
+bool process_args::copy_env()
+{
+	char *string_space = ustack_pointer;
+	char **argv_space = (char **) (ustack_pointer_base + sizeof(unsigned long) +
+		sizeof(char *) * (argc + 1));
+
+	bool st = copy_strings_and_put_in_array(string_space, kargv, argv_space, argc);
+	if(!st)
+		return false;
+	ustack_pointer = string_space;
+	return true;
+}
+
+bool process_args::copy_binargs()
+{
+	void *ubinargs_buf = (void *) ustack_pointer;
+
+	cbn_status_t st = CBN_STATUS_OK;
+	proc->write_memory(ubinargs_buf, kbin_args, kbinargsize, st);
+
+	return st == CBN_STATUS_OK;
+}
+
+bool process_args::copy_to_stack()
+{
+	assert(ustack_top != nullptr);
+	size_t argv_strings_len = string_array_len(argc, kargv);
+	size_t envp_strings_len = string_array_len(envc, kenvp);
+
+	size_t total_size = (argc + 1) * sizeof(uintptr_t) + argv_strings_len +
+			    (envc + 1) * sizeof(uintptr_t) + envp_strings_len +
+			    kbinargsize;
+	ustack_pointer_base = ustack_pointer = (char *) ustack_top - total_size;
+
+	return copy_args() && copy_env() && copy_binargs();
+}
+
+process_args::~process_args()
+{
+	if(kbin_dtor) kbin_dtor(kbin_args);
+}
+
+void process::exit(int exit_code)
+{
+	auto current_thread = get_current_thread();
+	scoped_spinlock guard{&thread_lock};
+
+	for(auto &t : thread_list)
+	{
+		auto& thread = t.second_member;
+		if(thread == current_thread)
+			continue;
+		/* TODO: Terminate other threads */
+	}
+
+#if 0
+	for(auto it = thread_list.begin(); it != thread_list.end();)
+	{
+		const auto& t = *it;
+		auto to_delete = it++;
+		thread_list.Remove(t, to_delete);
+		/* TODO: Actually delete threads*/
+		//delete t.second_member;
+	}
+#endif
+
+	/* TODO: Dispose of address space */
+	/* TODO: Dispose of handles */
+	printf("Dying\n");
+	guard.unlock();
+	current_thread->status = THREAD_DEAD;
+	scheduler::yield();
+
+	printf("What???\n");
+	
+}
+
+__attribute__((noreturn))
+void sys_cbn_exit_process(int exit_code)
+{
+	auto process = get_current_process();
+
+	process->exit(exit_code);
+
+	__builtin_unreachable();
 }

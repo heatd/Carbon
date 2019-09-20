@@ -15,8 +15,6 @@ LIBDIR?=$(EXEC_PREFIX)/usr/lib
 
 KERN_IN_TREE_BUILD:=yes
 
-# -fstack-protector-strong
-
 CPPFLAGS:=$(CPPFLAGS) -D__is_carbon_kernel -D_POSIX_C_SOURCE -D_BSD_SOURCE -Iinclude \
 -Iinclude/acpica -isystem ../libc/include -DKERNEL_VERSION='"$(KERNEL_VERSION)"' \
 -DKERNEL_BRANCH='"$(KERNEL_BRANCH)"' -DKERNEL_ARCH='"$(KERNEL_ARCH)"' -imacros \

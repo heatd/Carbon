@@ -5,8 +5,10 @@
 */
 #include <assert.h>
 
+#include <carbon/process.h>
 #include <carbon/handle.h>
 #include <carbon/handle_table.h>
+#include <carbon/syscall_utils.h>
 
 handle::handle(refcountable *ko, unsigned long __object_type, process *__owner) :
 	kernel_object(ko), object_type(__object_type), owner(__owner) 
@@ -119,4 +121,115 @@ handle *handle_table::get_handle(cbn_handle_t id)
 	if(!handles[id])
 		return nullptr;
 	return handles[id];
+}
+
+bool handle_table::emplace_handle(handle *hndl, cbn_handle_t dst, handle *&old, bool overwrite)
+{
+	scoped_rwlock<scoped_rwlock_write> guard{&handle_table_lock};
+	if(dst > handles.size())
+	{
+		if(!handles.alloc_buf(dst))
+			return false;
+	}
+
+	old = handles[dst];
+	if(old && !overwrite)
+		return false;
+
+	handles[dst] = hndl;
+
+	return true;
+}
+
+process *get_process_from_handle(cbn_handle_t process_handle)
+{
+	auto current = get_current_process();
+	auto &current_handle_table = current->get_handle_table();
+
+	process *dest_process = nullptr;
+	if(process_handle == CBN_INVALID_HANDLE)
+	{
+		dest_process = get_current_process();
+	}
+	else
+	{
+		auto handle = current_handle_table.get_handle(process_handle);
+		if(!handle)
+			return nullptr;
+		if(handle->get_object_type() != handle::process_object_type)
+			return nullptr;
+		dest_process = static_cast<process *>(handle->get_object());
+	}
+
+	return dest_process;
+}
+
+#define CBN_DUPLICATE_HANDLE_ALLOC_HANDLE	(1 << 0)
+#define CBN_DUPLICATE_HANDLE_OVERWRITE		(1 << 1)
+
+cbn_status_t cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srchandle_id,
+	cbn_handle_t dsthandle, cbn_handle_t *result, unsigned long flags)
+{
+	auto dest_process = get_process_from_handle(process_handle);
+	if(!dest_process)
+		return CBN_STATUS_INVALID_HANDLE;
+
+	auto &dest_handle_table = dest_process->get_handle_table();
+
+	handle *srchandle = dest_handle_table.get_handle(srchandle_id);
+	if(!srchandle)
+		return CBN_STATUS_INVALID_ARGUMENT;
+	
+	/* Be careful, right now we only need to do this in order to copy */
+	handle *dup = new handle{srchandle->get_object(), srchandle->get_object_type(),
+		srchandle->get_owner()};
+	if(!dup)
+		return CBN_STATUS_OUT_OF_MEMORY;
+	
+	cbn_handle_t dst = dsthandle;
+
+	if(flags & CBN_DUPLICATE_HANDLE_ALLOC_HANDLE)
+	{
+		dst = dest_handle_table.allocate_handle(dup);
+		if(dst == CBN_INVALID_HANDLE)
+		{
+			delete dup;
+			return CBN_STATUS_OUT_OF_MEMORY;
+		}
+
+		*result = dst;
+		return CBN_STATUS_OK;
+	}
+	
+	handle *old_handle;
+	bool success = dest_handle_table.emplace_handle(dup, dsthandle,
+		old_handle, flags & CBN_DUPLICATE_HANDLE_OVERWRITE);
+	
+	if(success && old_handle)
+	{
+		delete old_handle;
+	}
+
+	if(success)
+	{
+		*result = dst;
+		return CBN_STATUS_OK;
+	}
+	else
+	{
+		delete dup;
+		/* TODO: Don't assume we ran out of memory */
+		return CBN_STATUS_OUT_OF_MEMORY;
+	}
+}
+
+cbn_status_t cbn_close_handle(cbn_handle_t process_handle, cbn_handle_t hndl)
+{
+	auto dest_process = get_process_from_handle(process_handle);
+	if(!dest_process)
+		return CBN_STATUS_INVALID_HANDLE;
+	
+	auto &dest_handle_table = dest_process->get_handle_table();
+
+	return dest_handle_table.close_handle(hndl);
 }

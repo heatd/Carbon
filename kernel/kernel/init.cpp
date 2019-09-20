@@ -13,11 +13,14 @@
 #include <carbon/rwlock.h>
 #include <carbon/handle_table.h>
 #include <carbon/process.h>
+#include <carbon/vterm.h>
 
 void initrd_init(struct module *mod);
 
 int kernel_init(struct boot_info *info)
 {
+	vterm_init_sysobj();
+
 	page_cache::init();
 
 	ramfs::mount_root();
@@ -28,9 +31,12 @@ int kernel_init(struct boot_info *info)
 	shared_ptr<process_namespace> first_namespace = make_shared<process_namespace>(0);
 	cbn_status_t st;
 	printf("Creating\n");
+	int argc = 1;
+	char *args[] = {"/init", NULL};
+	char *env[] = {"INIT=1", NULL};
 	auto p = process::kernel_spawn_process_helper("init", "/sbin/init",
 				PROCESS_SPAWN_FLAG_CREATE_THREAD | PROCESS_SPAWN_FLAG_START,
-				first_namespace, st);
+				first_namespace, argc, args, 1, env, st);
 	if(!p)
 		printf("Failed with status %i\n", st);
 	

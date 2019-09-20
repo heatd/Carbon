@@ -1,6 +1,6 @@
 
-#ifndef _CARBON_EXCEPTIONS_H
-#define _CARBON_EXCEPTIONS_H
+#ifndef _CARBON_X86_EXCEPTIONS_H
+#define _CARBON_X86_EXCEPTIONS_H
 
 #include <stdint.h>
 #include <carbon/x86/idt.h>

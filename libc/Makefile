@@ -9,7 +9,6 @@ CFLAGS+=-mno-red-zone -mno-sse -mno-sse2 -fpie -DPIC -fno-plt -fno-jump-tables
 	$(CXX) $(CFLAGS) $(CPPFLAGS) -fno-exceptions -fno-rtti -c $< -o $@
 
 install-headers:
-	cp -r include/*	$(DESTDIR)/usr/include
 
 install: libk.a
 	mkdir -p $(DESTDIR)$(LIBDIR)

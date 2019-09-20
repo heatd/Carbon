@@ -12,6 +12,7 @@
 #include <carbon/array.h>
 
 class process;
+class process_args;
 
 namespace program_loader
 {
@@ -24,11 +25,7 @@ struct binary_info
 {
 	process *proc;
 	binary_entry_point_t entry;
-	unsigned long args[4];
-	/* 4 args should be enough.
-	*  NOTE: These arguments aren't the ones in argv,
-	*  but argc, argv, envp, etc themselves.
-	*/
+	process_args* args;
 };
 
 constexpr size_t sample_size = 256;

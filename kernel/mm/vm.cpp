@@ -32,6 +32,8 @@ int vm_cmp(const void* k1, const void* k2)
 struct vm_region *vm_reserve_region(struct address_space *as,
 				    unsigned long start, size_t size)
 {
+	assert((start & (PAGE_SIZE-1)) == 0);
+	size = size_to_pages(size) << PAGE_SHIFT;
 	struct vm_region *region = (struct vm_region *) zalloc(sizeof(*region));
 
 	if(!region)
@@ -265,10 +267,16 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 
 	if(!page)
 	{
-		vmo->lock.Unlock();
 		if(vmo->commit(off) < 0)
+		{
+			printf("commit failed\n");
 			return VmFaultStatus::VM_SEGFAULT;
+		}
+	
 		page = vmo->get(off);
+
+		if(!page)
+			return VmFaultStatus::VM_SEGFAULT;
 	}
 
 	if(!map_phys_to_virt(region->start + off, (unsigned long ) page->paddr, region->perms))
@@ -283,8 +291,6 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 enum VmFaultStatus VmFault::Handle()
 {
 	auto address_space = Vm::get_current_address_space();
-	if(address_space->lock.IsLocked())
-		return VmFaultStatus::VM_SEGFAULT;
 
 	scoped_spinlock l{&address_space->lock};
 	auto region = FindRegion((void *) fault_address, address_space->area_tree);
@@ -315,6 +321,7 @@ struct vm_region *MmapInternal(struct address_space *as, unsigned long min, size
 			       unsigned long flags, vm_object *vmo)
 {
 	scoped_spinlock guard{&as->lock};
+	size = size_to_pages(size) << PAGE_SHIFT;
 	struct vm_region *reg = AllocateRegionInternal(as, min, size);
 
 	if(!reg)

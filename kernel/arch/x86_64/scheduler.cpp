@@ -14,8 +14,16 @@
 #include <carbon/x86/tss.h>
 #include <carbon/memory.h>
 #include <carbon/x86/vm.h>
+#include <carbon/x86/registers.h>
+#include <carbon/percpu.h>
+#include <carbon/public/tlsop.h>
+#include <carbon/status.h>
+#include <carbon/syscall_utils.h>
 
-PER_CPU_VAR(unsigned long kernel_stack) = 0;
+extern "C" {
+PER_CPU_VAR_NOUNUSED(unsigned long kernel_stack) = 0;
+PER_CPU_VAR_NOUNUSED(unsigned long scratch_rsp) = 0;
+}
 
 namespace scheduler
 {
@@ -95,3 +103,41 @@ void arch_load_thread(struct thread *thread)
 }
 
 };
+
+long sys_set_tid_address(int *tidptr)
+{
+	/* TODO: Do something with tidptr */
+	return get_current_thread()->thread_id;
+}
+
+cbn_status_t sys_cbn_tls_op(tls_op code, unsigned long addr)
+{
+	auto thread = get_current_thread();
+	switch(code)
+	{
+		case tls_op::get_gs:
+		{
+			if(copy_to_user((void *) addr, &thread->gs, sizeof(unsigned long)) != CBN_STATUS_OK)
+				return CBN_STATUS_SEGFAULT;
+			return CBN_STATUS_OK;
+		}
+		case tls_op::get_fs:
+		{
+			if(copy_to_user((void *) addr, &thread->fs, sizeof(unsigned long)) != CBN_STATUS_OK)
+				return CBN_STATUS_SEGFAULT;
+			return CBN_STATUS_OK;
+		}
+		case tls_op::set_gs:
+		{
+			thread->gs = addr;
+			return CBN_STATUS_OK;
+		}
+		case tls_op::set_fs:
+		{
+			thread->fs = addr;
+			return CBN_STATUS_OK;
+		}
+		default:
+			return CBN_STATUS_INVALID_ARGUMENT;
+	}
+}

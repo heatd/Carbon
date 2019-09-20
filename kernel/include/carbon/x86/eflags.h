@@ -15,7 +15,7 @@
 #define EFLAGS_INT_ENABLED	(1 << 9)
 #define EFLAGS_DIRECTION	(1 << 10)
 #define EFLAGS_OVERFLOW		(1 << 11)
-
+#define EFLAGS_ALIGNMENT_CHECK  (1 << 18)
 
 static inline unsigned long x86_save_flags(void)
 {

@@ -29,6 +29,7 @@
 
 #include <carbon/fpu.h>
 #include <carbon/x86/gdt.h>
+#include <carbon/x86/syscall.h>
 
 void heap_set_start(uintptr_t heap_start);
 void paging_protect_kernel(void);
@@ -65,4 +66,6 @@ void x86_init(struct boot_info *info)
 	x86::Apic::Init();
 
 	Smp::BootCpus();
+
+	x86::syscall::init_syscall();
 }

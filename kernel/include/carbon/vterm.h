@@ -8,5 +8,6 @@
 #define _CARBON_VTERM_H
 
 void vterm_initialize(void);
+void vterm_init_sysobj();
 
 #endif

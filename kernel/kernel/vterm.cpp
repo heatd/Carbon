@@ -15,6 +15,9 @@
 #include <carbon/memory.h>
 #include <carbon/lock.h>
 #include <carbon/utf8.h>
+#include <carbon/system_objects.h>
+#include <carbon/handle.h>
+#include <carbon/inode.h>
 
 struct color
 {
@@ -352,4 +355,33 @@ void vterm_initialize(void)
 	vterm_fill_screen(&primary_vterm, ' ', primary_vterm.fg, primary_vterm.bg);
 
 	update_cursor(&primary_vterm);
+}
+
+class vterm_inode : public inode
+{
+private:
+	struct console *c;
+public:
+	vterm_inode(struct console *c) : c(c) {}
+	ssize_t write(const void *buffer, size_t size, size_t off) override
+	{
+		return vterm_write(buffer, size, c);
+	}
+};
+
+void vterm_init_sysobj()
+{
+	sysobj *carbon_tree = nullptr;
+	char *name = strdup("terminal0");
+	assert(name != nullptr);
+
+	vterm_inode *main_term = new vterm_inode{&primary_console};
+	assert(main_term != nullptr);
+
+	sysobj *terminal_0 = new sysobj{name, main_term, true, handle::inode_object_type};
+	assert(terminal_0 != nullptr);
+
+	assert(sysobjs::open_object("carbon", &carbon_tree) == CBN_STATUS_OK);
+
+	assert(carbon_tree->append_child(terminal_0) == true);
 }

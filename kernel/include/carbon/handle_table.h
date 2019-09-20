@@ -34,6 +34,9 @@ public:
 	cbn_handle_t allocate_handle(handle *handle);
 	cbn_status_t close_handle(cbn_handle_t handle);
 	handle *get_handle(cbn_handle_t id);
+
+	/* note: emplace_handle returns the old handle if it exists*/
+	bool emplace_handle(handle *hndl, cbn_handle_t dst, handle *&old, bool overwrite);
 };
 
 #endif

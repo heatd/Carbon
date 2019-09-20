@@ -13,6 +13,7 @@
 #include <carbon/x86/exceptions.h>
 #include <carbon/panic.h>
 #include <carbon/vm.h>
+#include <carbon/exceptions.h>
 
 void div0_exception(intctx_t *ctx)
 {
@@ -109,6 +110,17 @@ void page_fault_handler(intctx_t *ctx)
 
 	if(status != Vm::VmFaultStatus::VM_OK)
 	{
+		if(!user)
+		{
+			/* If it was a kernel fault, try to get a fixup for the exception */
+			auto fixup = exceptions::get_fixup(ctx->rip);
+			if(fixup != NO_FIXUP_EXISTS)
+			{
+				ctx->rip = fixup;
+				return;
+			}
+		}
+
 		fault.Dump();
 	}
 	else

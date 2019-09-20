@@ -1,7 +1,9 @@
 OBJS:=main.o
 
+CFLAGS:=-v
+
 init: $(OBJS)
-	$(CC) $(OBJS) -o init -Wl,-e_start -nostdlib -ffreestanding
+	$(CC) $(OBJS) -o init -static
 all: init
 
 install: init

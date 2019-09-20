@@ -14,6 +14,7 @@
 #include <carbon/x86/apic.h>
 #include <carbon/x86/gdt.h>
 #include <carbon/fpu.h>
+#include <carbon/x86/syscall.h>
 
 void idt_load();
 
@@ -33,6 +34,8 @@ void smpboot_main(unsigned long gs_base)
 	Fpu::Init();
 
 	x86::Apic::SetupLapic();
+
+	x86::syscall::init_syscall();
 
 	while(true)
 		__asm __volatile__("hlt");
