@@ -1,0 +1,3 @@
+musl/* linguist-vendored
+kernel/acpica/* linguist-vendored
+kernel/include/acpica/* linguist-vendored
