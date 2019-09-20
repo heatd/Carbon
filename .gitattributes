@@ -1,3 +1,5 @@
 musl/* linguist-vendored
 kernel/acpica/* linguist-vendored
 kernel/include/acpica/* linguist-vendored
+libc/include/* linguist-vendored
+kernel/kernel/boot-font.c linguist-vendored
