@@ -1,5 +1,6 @@
 #include "stdio_impl.h"
 #include <sys/uio.h>
+#include <carbon/public/status.h>
 
 size_t __stdio_write(FILE *f, const unsigned char *buf, size_t len)
 {
@@ -12,13 +13,13 @@ size_t __stdio_write(FILE *f, const unsigned char *buf, size_t len)
 	int iovcnt = 2;
 	ssize_t cnt;
 	for (;;) {
-		cnt = syscall(SYS_writev, f->fd, iov, iovcnt);
+		cbn_status_t st = syscall(SYS_cbn_writev, f->fd, iov, iovcnt, &cnt);
 		if (cnt == rem) {
 			f->wend = f->buf + f->buf_size;
 			f->wpos = f->wbase = f->buf;
 			return len;
 		}
-		if (cnt < 0) {
+		if (st < 0) {
 			f->wpos = f->wbase = f->wend = 0;
 			f->flags |= F_ERR;
 			return iovcnt == 2 ? 0 : len-iov[0].iov_len;

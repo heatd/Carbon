@@ -19,6 +19,12 @@ typedef uint32_t cbn_handle_t;
 #define CBN_OPEN_ACCESS_READ		(1 << 0)
 #define CBN_OPEN_ACCESS_WRITE		(1 << 1)
 
-cbn_status_t cbn_open_sys_handle(const char *upath, unsigned long permitions);
+//cbn_status_t cbn_open_sys_handle(const char *upath, unsigned long permitions);
+
+#define CBN_DUPLICATE_HANDLE_ALLOC_HANDLE	(1 << 0)
+#define CBN_DUPLICATE_HANDLE_OVERWRITE		(1 << 1)
+
+/*cbn_status_t cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srchandle_id,
+	cbn_handle_t dsthandle, cbn_handle_t *result, unsigned long flags);*/
 
 #endif

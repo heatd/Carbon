@@ -10,7 +10,7 @@
 #include <carbon/vector.h>
 #include <carbon/bitmap.h>
 #include <carbon/rwlock.h>
-
+#include <carbon/smart.h>
 #include <carbon/status.h>
 
 #define HANDLE_BITMAP_EXPANSION_INCREMENT	1024
@@ -22,7 +22,7 @@ private:
 	 * cache locality and having to keep the thing locked forever or having kinda
 	 * crap locality but not needing to keep the thing locked for a long time.
 	 * I went with the latter. */
-	vector<handle*> handles;
+	vector<shared_ptr<handle> > handles;
 	Bitmap<0> handle_bitmap;
 	rw_lock handle_table_lock;
 	unsigned long nr_open_handles;
@@ -33,10 +33,10 @@ public:
 
 	cbn_handle_t allocate_handle(handle *handle);
 	cbn_status_t close_handle(cbn_handle_t handle);
-	handle *get_handle(cbn_handle_t id);
+	shared_ptr<handle> get_handle(cbn_handle_t id);
 
 	/* note: emplace_handle returns the old handle if it exists*/
-	bool emplace_handle(handle *hndl, cbn_handle_t dst, handle *&old, bool overwrite);
+	bool emplace_handle(handle *hndl, cbn_handle_t dst, shared_ptr<handle> &old, bool overwrite);
 };
 
 #endif

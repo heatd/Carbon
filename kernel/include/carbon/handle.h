@@ -18,7 +18,7 @@ private:
 	unsigned long object_type;
 	process *owner;
 public:
-	static constexpr unsigned long inode_object_type = 0x10000;
+	static constexpr unsigned long file_object_type = 0x10000;
 	static constexpr unsigned long process_object_type = 0x10001;
 	/* Note: handle::handle() refers the kernel object on its own */
 	handle(refcountable *ko, unsigned long type, process *owner);

@@ -4,11 +4,17 @@
 * check LICENSE at the root directory for more information
 */
 
+#define kernel_min 0xffff800000000000
+.section .data
+kernel_min_val: .quad kernel_min
+
 # cbn_status_t copy_to_user(void *udst, const void *ksrc, size_t size);
 .section .text
 .global copy_to_user
 .balign 32
 copy_to_user:
+	cmp (kernel_min_val), %rdi
+	jae copy_to_user.handler
 	xor %rax, %rax
 	mov %rdx, %rcx
 copy_to_user.copy_instr:
@@ -29,6 +35,8 @@ copy_to_user.handler:
 .global copy_from_user
 .balign 32
 copy_from_user:
+	cmp (kernel_min_val), %rsi
+	jae copy_from_user.handler
 	xor %rax, %rax
 	mov %rdx, %rcx
 copy_from_user.copy_instr:
@@ -48,6 +56,8 @@ copy_from_user.handler:
 .global strlen_user
 .balign 32
 strlen_user:
+	cmp (kernel_min_val), %rdi
+	jae strlen_user.handler
 	xor %rax, %rax
 strlen_user.count:
 	mov (%rdi), %si

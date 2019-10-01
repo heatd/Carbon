@@ -165,13 +165,17 @@ cbn_status_t elf_loader::load(fs::auto_inode& file, program_loader::binary_info&
 			}
 		}
 
-		printf("base %lx - size %lx\n", phdr.p_vaddr, phdr.p_memsz);
+		//printf("base %lx - size %lx\n", phdr.p_vaddr, phdr.p_memsz);
+		cbn_status_t st;
+		size_t p = 0;
+		out.proc->read_memory((void *) 0x402fe0, (void *) &p, sizeof(size_t), st);
+		//printf("P: %lx\n", p);
 	}
 
-	printf("allocating auxv\n");
+	//printf("allocating auxv\n");
 
 	Elf64_auxv_t *auxv = new Elf64_auxv_t[auxv_entries];
-	printf("%p\n", auxv);
+
 	if(!auxv)
 		return CBN_STATUS_OUT_OF_MEMORY;
 
@@ -185,8 +189,6 @@ cbn_status_t elf_loader::load(fs::auto_inode& file, program_loader::binary_info&
 		delete auxv;
 		return CBN_STATUS_OUT_OF_MEMORY;
 	}
-
-	printf("scratch page: %p\n", scratch_page);
 
 	char *scratch_space = (char *) scratch_page;
 

@@ -42,7 +42,7 @@ isr_common:
 .global isr\isr_num
 isr\isr_num:
 	cli
-	pushq 0
+	pushq $0
 	pushq $\isr_num
 	pushaq
 	jmp isr_common

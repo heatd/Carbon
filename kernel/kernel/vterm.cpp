@@ -18,6 +18,7 @@
 #include <carbon/system_objects.h>
 #include <carbon/handle.h>
 #include <carbon/inode.h>
+#include <carbon/fs/file.h>
 
 struct color
 {
@@ -377,8 +378,11 @@ void vterm_init_sysobj()
 
 	vterm_inode *main_term = new vterm_inode{&primary_console};
 	assert(main_term != nullptr);
+	
+	file *f = new file{false, main_term};
+	assert(f != nullptr);
 
-	sysobj *terminal_0 = new sysobj{name, main_term, true, handle::inode_object_type};
+	sysobj *terminal_0 = new sysobj{name, f, true, handle::file_object_type};
 	assert(terminal_0 != nullptr);
 
 	assert(sysobjs::open_object("carbon", &carbon_tree) == CBN_STATUS_OK);

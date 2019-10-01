@@ -48,7 +48,10 @@ install-basic-packages: $(PROJECTS)
 musl-libc: kernel
 	$(MAKE) -C musl install
 
-install-packages: install-basic-packages musl-libc
+libcarbon: musl-libc
+	$(MAKE) -C libcarbon install
+
+install-packages: install-basic-packages musl-libc libcarbon
 	$(MAKE) -C $(SOURCE_PACKAGES) install
 
 efibootldr: install-headers

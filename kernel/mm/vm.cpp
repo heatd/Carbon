@@ -261,19 +261,20 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 {
 	auto vmo = region->vmo;
 	unsigned long fault_addr_aligned = fault_address & ~(PAGE_SIZE - 1);
+	size_t vmo_off = fault_addr_aligned - region->start + region->off;
 	size_t off = fault_addr_aligned - region->start;
 	
-	auto page = vmo->get(off);
+	auto page = vmo->get(vmo_off);
 
 	if(!page)
 	{
-		if(vmo->commit(off) < 0)
+		if(vmo->commit(vmo_off) < 0)
 		{
 			printf("commit failed\n");
 			return VmFaultStatus::VM_SEGFAULT;
 		}
 	
-		page = vmo->get(off);
+		page = vmo->get(vmo_off);
 
 		if(!page)
 			return VmFaultStatus::VM_SEGFAULT;

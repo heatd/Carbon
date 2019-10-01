@@ -1,9 +1,7 @@
 OBJS:=main.o
 
-CFLAGS:=-v
-
 init: $(OBJS)
-	$(CC) $(OBJS) -o init -static
+	$(CC) $(OBJS) -o init -static -lcarbon
 all: init
 
 install: init

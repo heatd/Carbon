@@ -28,7 +28,7 @@ private:
 
 	void setup_expansion(size_t new_nr_elems)
 	{
-		for(size_t i = nr_elems; i < new_nr_elems - nr_elems; i++)
+		for(size_t i = nr_elems; i < new_nr_elems; i++)
 		{
 			new (data + i) T{};
 		}
@@ -74,7 +74,20 @@ public:
 		return true;
 	}
 
-	bool push_back(T& obj)
+	bool push_back(const T& obj)
+	{
+		if(nr_elems >= buffer_size)
+		{
+			if(!expand_vec())
+				return false;
+		}
+
+		data[nr_elems++] = obj;
+
+		return true;
+	}
+
+	bool push_back(T&& obj)
 	{
 		if(nr_elems >= buffer_size)
 		{

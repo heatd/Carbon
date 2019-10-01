@@ -10,6 +10,10 @@
 #include <carbon/memory.h>
 #include <carbon/page.h>
 #include <carbon/vmobject.h>
+#include <carbon/syscall_utils.h>
+#include <carbon/fs/file.h>
+
+#include <sys/uio.h>
 
 ssize_t inode::read(void *buffer, size_t size, size_t off)
 {
@@ -209,4 +213,107 @@ ssize_t inode::read_page_cache(void *buffer, size_t len, size_t offset)
 	}
 
 	return (ssize_t) read;
+}
+
+cbn_status_t sys_cbn_write(cbn_handle_t handle, const void *buffer, size_t len, size_t *written)
+{
+	auto file_handle = get_handle_from_handle_id(handle, handle::file_object_type);
+	if(!file_handle)
+		return CBN_STATUS_INVALID_HANDLE;
+
+	auto fptr = static_cast<file*>(file_handle->get_object());
+
+	size_t w = 0;
+	cbn_status_t st = fptr->write(buffer, len, &w);
+
+	if(copy_to_user((void *) written, &w, sizeof(size_t)) < 0)
+		return CBN_STATUS_SEGFAULT;
+	return st;
+}
+
+cbn_status_t sys_cbn_read(cbn_handle_t handle, void *buffer, size_t len, size_t *read)
+{
+	auto file_handle = get_handle_from_handle_id(handle, handle::file_object_type);
+	if(!file_handle)
+		return CBN_STATUS_INVALID_HANDLE;
+	
+	auto fptr = static_cast<file*>(file_handle->get_object());
+
+	size_t r = 0;
+	cbn_status_t st = fptr->read(buffer, len, &r);
+
+	if(copy_to_user((void *) read, &r, sizeof(size_t)) < 0)
+		return CBN_STATUS_SEGFAULT;
+	return st;
+}
+
+cbn_status_t sys_cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res)
+{
+	vector<struct iovec> kiov{};
+	if(!kiov.alloc_buf(veccnt * sizeof(struct iovec)))
+		return CBN_STATUS_OUT_OF_MEMORY;
+	
+	kiov.set_nr_elems(veccnt);
+
+	if(copy_from_user(kiov.get_buf(), iovs, veccnt * sizeof(struct iovec)) < 0)
+		return CBN_STATUS_SEGFAULT;
+
+	auto file_handle = get_handle_from_handle_id(handle, handle::file_object_type);
+	if(!file_handle)
+		return CBN_STATUS_INVALID_HANDLE;
+	
+	auto fptr = static_cast<file*>(file_handle->get_object());
+
+	size_t written = 0;
+	for(struct iovec &v : kiov)
+	{
+		size_t temp = 0;
+
+		auto st = fptr->write(v.iov_base, v.iov_len, &temp);
+		written += temp;
+		if(st != CBN_STATUS_OK)
+		{
+			if(copy_to_user((void *) res, &written, sizeof(size_t)) < 0)
+				return CBN_STATUS_SEGFAULT;
+			return st;
+		}
+	}
+
+	if(copy_to_user((void *) res, &written, sizeof(size_t)) < 0)
+		return CBN_STATUS_SEGFAULT;	
+
+	return CBN_STATUS_OK;
+}
+
+cbn_status_t sys_cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res)
+{
+	vector<struct iovec> kiov{};
+	if(!kiov.alloc_buf(veccnt * sizeof(struct iovec)))
+		return CBN_STATUS_OUT_OF_MEMORY;
+	
+	if(copy_from_user(kiov.get_buf(), iovs, veccnt * sizeof(struct iovec)) < 0)
+		return CBN_STATUS_SEGFAULT;
+
+	auto file_handle = get_handle_from_handle_id(handle, handle::file_object_type);
+	if(!file_handle)
+		return CBN_STATUS_INVALID_HANDLE;
+	
+	auto fptr = static_cast<file*>(file_handle->get_object());
+
+	size_t done = 0;
+	for(struct iovec &v : kiov)
+	{
+		auto st = fptr->read(v.iov_base, v.iov_len, &done);
+		if(st != CBN_STATUS_OK)
+		{
+			if(copy_to_user((void *) res, &done, sizeof(size_t)) < 0)
+				return CBN_STATUS_SEGFAULT;
+			return st;
+		}
+	}
+
+	if(copy_to_user((void *) res, &done, sizeof(size_t)) < 0)
+		return CBN_STATUS_SEGFAULT;	
+
+	return CBN_STATUS_OK;
 }

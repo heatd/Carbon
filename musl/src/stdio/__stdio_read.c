@@ -1,5 +1,6 @@
 #include "stdio_impl.h"
 #include <sys/uio.h>
+#include <carbon/public/status.h>
 
 size_t __stdio_read(FILE *f, unsigned char *buf, size_t len)
 {
@@ -9,10 +10,18 @@ size_t __stdio_read(FILE *f, unsigned char *buf, size_t len)
 	};
 	ssize_t cnt;
 
-	cnt = iov[0].iov_len ? syscall(SYS_readv, f->fd, iov, 2)
-		: syscall(SYS_cbn_read, f->fd, iov[1].iov_base, iov[1].iov_len);
-	if (cnt <= 0) {
-		f->flags |= cnt ? F_ERR : F_EOF;
+	cbn_status_t st;
+	if(iov[0].iov_len)
+	{
+		st = syscall(SYS_cbn_readv, f->fd, iov, 2, &cnt);
+	}
+	else
+		st = syscall(SYS_cbn_read, f->fd, iov[1].iov_base, iov[1].iov_len, &cnt);
+
+	if (st != CBN_STATUS_OK)
+		f->flags |= F_ERR;
+	else if(cnt == 0) {
+		f->flags |= F_EOF;
 		return 0;
 	}
 	if (cnt <= iov[0].iov_len) return cnt;

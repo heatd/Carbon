@@ -118,6 +118,7 @@ unsigned int gop_get_bpp(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info)
 		return bpp + 1;
 	}
 }
+
 int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 {
 	EFI_STATUS st = 0;

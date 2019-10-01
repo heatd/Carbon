@@ -17,11 +17,12 @@
 #include <carbon/list.h>
 #include <carbon/panic.h>
 #include <carbon/smart.h>
+#include <carbon/refcount.h>
 
 #include <libdict/rb_tree.h>
 struct page;
 
-class vm_object
+class vm_object : public refcountable
 {
 
 protected:

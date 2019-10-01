@@ -63,12 +63,16 @@ public:
 	shared_ptr() : ref(nullptr) {}
 	shared_ptr(T *data)
 	{
-		ref = new refcount<T>(data);
+		if(data != nullptr)
+			ref = new refcount<T>(data);
+		else
+			ref = nullptr;
 	}
 
 	shared_ptr(const shared_ptr<T>& ptr)
 	{
-		ptr.ref->refer();
+		if(ptr.ref)
+			ptr.ref->refer();
 		ref = ptr.ref;
 	}
 

@@ -9,6 +9,7 @@
 #include <carbon/handle.h>
 #include <carbon/handle_table.h>
 #include <carbon/syscall_utils.h>
+#include <carbon/utility.hpp>
 
 handle::handle(refcountable *ko, unsigned long __object_type, process *__owner) :
 	kernel_object(ko), object_type(__object_type), owner(__owner) 
@@ -39,11 +40,11 @@ handle_table::~handle_table()
 	for(auto it = handles.begin(); it != handles.end(); it++)
 	{
 		auto handle = *it;
-		delete handle;
+		handle = nullptr;
 	}
 }
 
-cbn_handle_t handle_table::allocate_handle(handle *handle)
+cbn_handle_t handle_table::allocate_handle(handle *h)
 {
 	scoped_rwlock<scoped_rwlock_write> guard{&handle_table_lock};
 
@@ -51,17 +52,17 @@ cbn_handle_t handle_table::allocate_handle(handle *handle)
 
 	if(handle_index == CBN_INVALID_HANDLE)
 		return CBN_INVALID_HANDLE;
-	
+
 	if(handle_index >= handles.size())
 	{
-		if(!handles.push_back(handle))
+		if(!handles.push_back(shared_ptr<handle>{h}))
 		{
 			handle_bitmap.FreeBit(handle_index);
 			return CBN_INVALID_HANDLE;
 		}
 	}
 	else
-		handles[handle_index] = handle;
+		handles[handle_index] = shared_ptr<handle>{h};
 
 	nr_open_handles++;
 
@@ -107,28 +108,28 @@ cbn_status_t handle_table::close_handle(cbn_handle_t handle)
 	auto h = handles[handle];
 	handles[handle] = nullptr;
 	handle_bitmap.FreeBit(handle);
-	delete h;
+	nr_open_handles--;
 
 	return CBN_STATUS_OK;
 }
 
-handle *handle_table::get_handle(cbn_handle_t id)
+shared_ptr<handle> handle_table::get_handle(cbn_handle_t id)
 {
 	scoped_rwlock<scoped_rwlock_read> guard{&handle_table_lock};
 
-	if(id > handles.size())
+	if(id >= handles.size())
 		return nullptr;
 	if(!handles[id])
 		return nullptr;
 	return handles[id];
 }
 
-bool handle_table::emplace_handle(handle *hndl, cbn_handle_t dst, handle *&old, bool overwrite)
+bool handle_table::emplace_handle(handle *hndl, cbn_handle_t dst, shared_ptr<handle> &old, bool overwrite)
 {
 	scoped_rwlock<scoped_rwlock_write> guard{&handle_table_lock};
 	if(dst > handles.size())
 	{
-		if(!handles.alloc_buf(dst))
+		if(!handles.alloc_buf(dst * sizeof(shared_ptr<handle>)))
 			return false;
 	}
 
@@ -164,24 +165,20 @@ process *get_process_from_handle(cbn_handle_t process_handle)
 	return dest_process;
 }
 
-#define CBN_DUPLICATE_HANDLE_ALLOC_HANDLE	(1 << 0)
-#define CBN_DUPLICATE_HANDLE_OVERWRITE		(1 << 1)
-
-cbn_status_t cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srchandle_id,
+cbn_status_t sys_cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srchandle_id,
 	cbn_handle_t dsthandle, cbn_handle_t *result, unsigned long flags)
 {
 	auto dest_process = get_process_from_handle(process_handle);
 	if(!dest_process)
 		return CBN_STATUS_INVALID_HANDLE;
-
 	auto &dest_handle_table = dest_process->get_handle_table();
 
-	handle *srchandle = dest_handle_table.get_handle(srchandle_id);
+	auto srchandle = dest_handle_table.get_handle(srchandle_id);
 	if(!srchandle)
 		return CBN_STATUS_INVALID_ARGUMENT;
-	
+
 	/* Be careful, right now we only need to do this in order to copy */
-	handle *dup = new handle{srchandle->get_object(), srchandle->get_object_type(),
+	auto dup = new handle{srchandle->get_object(), srchandle->get_object_type(),
 		srchandle->get_owner()};
 	if(!dup)
 		return CBN_STATUS_OUT_OF_MEMORY;
@@ -201,14 +198,10 @@ cbn_status_t cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srch
 		return CBN_STATUS_OK;
 	}
 	
-	handle *old_handle;
+	/* old_handle gets deleted by RAII if it's valid */
+	shared_ptr<handle> old_handle;
 	bool success = dest_handle_table.emplace_handle(dup, dsthandle,
 		old_handle, flags & CBN_DUPLICATE_HANDLE_OVERWRITE);
-	
-	if(success && old_handle)
-	{
-		delete old_handle;
-	}
 
 	if(success)
 	{
@@ -232,4 +225,19 @@ cbn_status_t cbn_close_handle(cbn_handle_t process_handle, cbn_handle_t hndl)
 	auto &dest_handle_table = dest_process->get_handle_table();
 
 	return dest_handle_table.close_handle(hndl);
+}
+
+shared_ptr<handle> get_handle_from_handle_id(cbn_handle_t hid, unsigned long obj_type)
+{
+	auto current = get_current_process();
+	auto &handle_table = current->get_handle_table();
+
+	auto h = handle_table.get_handle(hid);
+	if(!h)
+		return nullptr;
+	
+	if(h->get_object_type() != obj_type)
+		return nullptr;
+	
+	return h;
 }

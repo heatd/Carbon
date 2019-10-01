@@ -352,7 +352,6 @@ process *process::kernel_spawn_process_helper(const char *name, const char *path
 	if(st != CBN_STATUS_OK)
 		printf("Failure: Status %i\n", st);
 
-	printf("Entry: %p\n", info.entry);
 	auto ustack = Vm::allocate_stack(&p->address_space, (size_t) vm::defaults::user_stack_size,
 		VM_PROT_WRITE | VM_PROT_USER);
 	assert(ustack != nullptr);

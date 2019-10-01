@@ -19,6 +19,7 @@
 #include <carbon/public/tlsop.h>
 #include <carbon/status.h>
 #include <carbon/syscall_utils.h>
+#include <carbon/x86/msr.h>
 
 extern "C" {
 PER_CPU_VAR_NOUNUSED(unsigned long kernel_stack) = 0;
@@ -99,6 +100,8 @@ void arch_load_thread(struct thread *thread)
 	{
 		Fpu::RestoreFpu(thread->fpu_area);
 		vm::switch_address_space(thread->owner->address_space.arch_priv);
+		wrmsr(KERNEL_GS_BASE, thread->gs);
+		wrmsr(FS_BASE_MSR, thread->fs);
 	}
 }
 
@@ -108,6 +111,16 @@ long sys_set_tid_address(int *tidptr)
 {
 	/* TODO: Do something with tidptr */
 	return get_current_thread()->thread_id;
+}
+
+void flush_thread_gs(struct thread *t)
+{
+	wrmsr(KERNEL_GS_BASE, t->gs);
+}
+
+void flush_thread_fs(struct thread *t)
+{
+	wrmsr(FS_BASE_MSR, t->fs);
 }
 
 cbn_status_t sys_cbn_tls_op(tls_op code, unsigned long addr)
@@ -130,11 +143,13 @@ cbn_status_t sys_cbn_tls_op(tls_op code, unsigned long addr)
 		case tls_op::set_gs:
 		{
 			thread->gs = addr;
+			flush_thread_gs(thread);
 			return CBN_STATUS_OK;
 		}
 		case tls_op::set_fs:
 		{
 			thread->fs = addr;
+			flush_thread_fs(thread);
 			return CBN_STATUS_OK;
 		}
 		default:

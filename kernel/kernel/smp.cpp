@@ -20,6 +20,7 @@ namespace Smp
 static Bitmap<0, false> bt;
 unsigned int nr_cpus = 0;
 unsigned int online_cpus = 0;
+constexpr unsigned long smp_trampoline_phys = 0x0;
 
 PER_CPU_VAR(unsigned int cpu_nr) = 0;
 
@@ -39,7 +40,7 @@ void SetOnline(unsigned int cpu)
 void BootCpus()
 {
 	printf("smpboot: booting cpus\n");
-	memcpy((void*) (PHYS_BASE + (uintptr_t) 0x0), &_start_smp,
+	memcpy((void*) (PHYS_BASE + (uintptr_t) smp_trampoline_phys), &_start_smp,
 		(uintptr_t) &_end_smp - (uintptr_t) &_start_smp);
 	
 	for(unsigned int i = 0; i < nr_cpus; i++)

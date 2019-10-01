@@ -17,17 +17,29 @@ void spin_lock(struct spinlock *lock)
 		while(lock->lock == 1)
 			__asm__ __volatile__("pause");
 	}
+
+#ifdef CONFIG_SPINLOCK_HOLDER
+	lock->holder = __builtin_return_address(0);
+#endif
 }
 
 void spin_lock_irqsave(struct spinlock *lock)
 {
 	lock->old_flags = irq_save_and_disable();
 	spin_lock(lock);
+
+#ifdef CONFIG_SPINLOCK_HOLDER
+	lock->holder = __builtin_return_address(0);
+#endif
+
 }
 
 void spin_unlock(struct spinlock *lock)
 {
 	assert(lock->lock != 0);
+#ifdef CONFIG_SPINLOCK_HOLDER
+	lock->holder = nullptr;
+#endif
 	__sync_lock_release(&lock->lock);
 
 	scheduler::enable_preemption();

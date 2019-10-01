@@ -84,6 +84,16 @@ void stack_segment_fault(intctx_t *ctx)
 
 void general_protection_fault(intctx_t *ctx)
 {
+	if(ctx->rip >= (unsigned long) vm::limits::kernel_min)
+	{
+		auto fixup = exceptions::get_fixup(ctx->rip);
+		if(fixup != NO_FIXUP_EXISTS)
+		{
+			ctx->rip = fixup;
+			return;
+		}
+	}
+	
 	printf("GPF at %lx, rbp %lx\n", ctx->rip, ctx->rbp);
 	panic("General protection fault");
 }

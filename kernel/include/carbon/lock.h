@@ -13,6 +13,9 @@ struct spinlock
 {
 	unsigned long lock;
 	unsigned long old_flags;
+#ifdef CONFIG_SPINLOCK_HOLDER
+	void *holder;
+#endif
 };
 
 #ifdef __cplusplus
@@ -32,7 +35,7 @@ class Spinlock
 private:
 	struct spinlock lock;
 public:
-	constexpr Spinlock() : lock {0, 0} {};
+	constexpr Spinlock() : lock {} {};
 	~Spinlock();
 	void Lock();
 	void LockIrqsave();

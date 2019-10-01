@@ -14,12 +14,19 @@
 #include <carbon/public/handle.h>
 
 #include <stdio.h>
+#include <sys/uio.h>
 
 long sys_set_tid_address(int *ptr);
 cbn_status_t sys_cbn_tls_op(tls_op code, unsigned long addr);
 __attribute__((noreturn))
 void sys_cbn_exit_process(int exit_code);
 cbn_status_t sys_cbn_open_sys_handle(const char *upath, unsigned long permitions);
+cbn_status_t sys_cbn_duplicate_handle(cbn_handle_t process_handle, cbn_handle_t srchandle_id,
+	cbn_handle_t dsthandle, cbn_handle_t *result, unsigned long flags);
+cbn_status_t sys_cbn_write(cbn_handle_t handle, const void *buffer, size_t len, size_t *written);
+cbn_status_t sys_cbn_read(cbn_handle_t handle, void *buffer, size_t len, size_t *read);
+cbn_status_t sys_cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
+cbn_status_t sys_cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
 
 namespace x86
 {
@@ -50,11 +57,14 @@ void *syscall_table_64[] =
 	(void *) sys_set_tid_address,
 	(void *) sys_cbn_tls_op,
 	(void *) sys_cbn_exit_process,
+	(void *) sys_cbn_read,
+	(void *) sys_cbn_write,
 	(void *) sys_badsys,
 	(void *) sys_badsys,
-	(void *) sys_badsys,
-	(void *) sys_badsys,
-	(void *) sys_cbn_open_sys_handle
+	(void *) sys_cbn_open_sys_handle,
+	(void *) sys_cbn_readv,
+	(void *) sys_cbn_writev,
+	(void *) sys_cbn_duplicate_handle
 };
 
 extern "C" long do_syscall64(struct syscall_frame *frame)
@@ -63,7 +73,7 @@ extern "C" long do_syscall64(struct syscall_frame *frame)
 	long ret = 0;
 
 	//proc_event_enter_syscall(frame, frame->rax);
-	printf("syscall start %lu\n", syscall_nr);
+	//printf("syscall start %lu\n", syscall_nr);
 	if(likely(syscall_nr <= NR_SYSCALL_MAX))
 	{
 		ret = ((syscall_callback_t) syscall_table_64[syscall_nr])(frame->rdi, frame->rsi,
@@ -74,7 +84,7 @@ extern "C" long do_syscall64(struct syscall_frame *frame)
 		ret = CBN_STATUS_BADSYS;	
 
 	//proc_event_exit_syscall(ret, syscall_nr);
-	printf("System call %lu\n", syscall_nr);
+	//printf("System call %lu\n", syscall_nr);
 
 	return ret;
 }

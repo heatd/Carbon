@@ -30,7 +30,7 @@ int kernel_init(struct boot_info *info)
 
 	shared_ptr<process_namespace> first_namespace = make_shared<process_namespace>(0);
 	cbn_status_t st;
-	printf("Creating\n");
+
 	int argc = 1;
 	char *args[] = {"/init", NULL};
 	char *env[] = {"INIT=1", NULL};

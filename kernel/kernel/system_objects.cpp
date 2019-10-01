@@ -106,7 +106,9 @@ cbn_status_t sys_cbn_open_sys_handle(const char *upath, unsigned long permitions
 	auto st = str.from_user_string(upath);
 
 	if(st != CBN_STATUS_OK)
+	{
 		return st;
+	}
 	
 	sysobj *result;
 	st = sysobjs::open_object(str.get_string(), &result);

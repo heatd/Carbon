@@ -9,6 +9,7 @@
 
 #include <carbon/status.h>
 #include <carbon/process.h>
+#include <carbon/smart.h>
 
 extern "C" cbn_status_t copy_to_user(void *udst, const void *ksrc, size_t size);
 extern "C" cbn_status_t copy_from_user(void *kdst, const void *usrc, size_t size);
@@ -39,5 +40,7 @@ public:
 		return len;
 	}
 };
+
+shared_ptr<handle> get_handle_from_handle_id(cbn_handle_t handle, unsigned long obj_type);
 
 #endif

@@ -9,7 +9,7 @@
 
 #include <carbon/public/status.h>
 
-enum tls_op : unsigned long
+enum tls_op
 {
 	get_gs = 0,
 	get_fs,
@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 /* Works like linux's arch_prctl - addr is unsigned long on set, unsigned long * on get */
-cbn_status_t cbn_tls_op(tls_op operation, unsigned long addr);
+// cbn_status_t cbn_tls_op(enum tls_op operation, unsigned long addr);
 
 #ifdef __cplusplus
 }

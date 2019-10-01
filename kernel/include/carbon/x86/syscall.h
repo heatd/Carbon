@@ -9,7 +9,7 @@
 
 #include <sys/syscall.h>
 
-#define NR_SYSCALL_MAX		7
+#define NR_SYSCALL_MAX		10
 
 #ifndef __ASSEMBLER__
 

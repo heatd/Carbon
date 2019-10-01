@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "syscall.h"
 
+#include <carbon/public/handle.h>
 #define UNGET 8
 
 #define FFINALLOCK(f) ((f)->lock>=0 ? __lockfile((f)) : 0)
@@ -31,7 +32,7 @@ struct _IO_FILE {
 	unsigned char *buf;
 	size_t buf_size;
 	FILE *prev, *next;
-	int fd;
+	cbn_handle_t fd;
 	int pipe_pid;
 	long lockcount;
 	int mode;
