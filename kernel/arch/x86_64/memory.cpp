@@ -386,7 +386,7 @@ void __unmap_page(PML *__pml4, void *addr)
 
 	entry = pml4->entries[indices[3]];
 
-	if(!entry & 1)
+	if(!(entry & 1))
 		return;
 
 	PML *pml3 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));
@@ -395,7 +395,7 @@ void __unmap_page(PML *__pml4, void *addr)
 	
 	entry = pml3->entries[indices[2]];
 
-	if(!entry & 1)
+	if(!(entry & 1))
 		return;
 
 	PML *pml2 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));
@@ -404,7 +404,7 @@ void __unmap_page(PML *__pml4, void *addr)
 
 	entry = pml2->entries[indices[1]];
 
-	if(!entry & 1)
+	if(!(entry & 1))
 		return;
 
 	PML *pml1 = (PML*) phys_to_virt(PML_EXTRACT_ADDRESS(entry));

@@ -17,6 +17,9 @@
 #include <carbon/new.h>
 #include <stdio.h>
 
+namespace cul
+{
+
 template <typename T>
 class vector
 {
@@ -178,6 +181,8 @@ public:
 	{
 		return data;
 	}
+};
+
 };
 
 #endif

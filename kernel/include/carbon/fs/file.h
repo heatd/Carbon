@@ -35,6 +35,11 @@ public:
 		return seekable;
 	}
 
+	inode *get_inode()
+	{
+		return ino;
+	}
+
 	cbn_status_t seek(ssize_t off, unsigned long type, size_t *ret);
 	cbn_status_t write(const void *buffer, size_t len, size_t *written);
 	cbn_status_t read(void *buffer, size_t len, size_t *read);

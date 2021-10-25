@@ -22,7 +22,7 @@ private:
 	 * cache locality and having to keep the thing locked forever or having kinda
 	 * crap locality but not needing to keep the thing locked for a long time.
 	 * I went with the latter. */
-	vector<shared_ptr<handle> > handles;
+	cul::vector<shared_ptr<handle> > handles;
 	Bitmap<0> handle_bitmap;
 	rw_lock handle_table_lock;
 	unsigned long nr_open_handles;

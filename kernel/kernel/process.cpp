@@ -185,8 +185,8 @@ thread *process::create_thread(scheduler::thread_callback entry, void *arg, void
 		return nullptr;
 	}
 
-	pair p{number_of_threads++, t};
-	
+	cul::pair<unsigned long, scheduler::thread*> p{number_of_threads++, t};
+
 	if(!thread_list.Add(p))
 	{
 		out_status = CBN_STATUS_OUT_OF_MEMORY;

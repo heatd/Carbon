@@ -42,5 +42,6 @@ public:
 };
 
 shared_ptr<handle> get_handle_from_handle_id(cbn_handle_t handle, unsigned long obj_type);
+process *get_process_from_handle(cbn_handle_t process_handle);
 
 #endif

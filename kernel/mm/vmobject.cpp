@@ -12,6 +12,7 @@
 #include <carbon/vm.h>
 #include <carbon/memory.h>
 #include <carbon/panic.h>
+#include <carbon/syscall_utils.h>
 
 int vm_object::add_page(size_t offset, struct page *page)
 {
@@ -389,4 +390,32 @@ size_t vm_object::read(size_t offset, void *dst, size_t size)
 	}
 
 	return been_read;
+}
+
+cbn_status_t sys_cbn_vmo_create(size_t size, cbn_handle_t *out)
+{
+	auto& handle_table = get_current_process()->get_handle_table();
+
+	auto vmo = new vm_object_phys{true, size_to_pages(size), nullptr};
+	if(!vmo)
+		return CBN_STATUS_OUT_OF_MEMORY;
+	
+	handle *h = new handle{vmo, handle::vmo_object_type, get_current_process()};
+	if(!h)
+	{
+		delete vmo;
+		return CBN_STATUS_OUT_OF_MEMORY;
+	}
+
+	auto handle_id = handle_table.allocate_handle(h);
+	if(handle_id == CBN_INVALID_HANDLE)
+	{
+		delete h;
+		return CBN_STATUS_OUT_OF_MEMORY;
+	}
+
+	if(copy_to_user(out, &handle_id, sizeof(handle_id)) < 0)
+		return CBN_STATUS_SEGFAULT;
+
+	return CBN_STATUS_OK;
 }

@@ -10,16 +10,23 @@
 
 ssize_t generic_non_backed_ino::write(const void *buffer, size_t size, size_t off)
 {
+	(void) buffer;
+	(void) size;
+	(void) off;
 	return size;
 }
 
 ssize_t generic_non_backed_ino::read(void *buffer, size_t size, size_t off)
 {
+	(void) buffer;
+	(void) size;
+	(void) off;
 	return 0;
 }
 
 inode *generic_non_backed_ino::create(const char *name, mode_t mode)
 {
+	(void) name;
 	/* Note: We don't need to create dentries because the dentry code
 	 * does it for us
 	*/

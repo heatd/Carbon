@@ -27,6 +27,10 @@ cbn_status_t sys_cbn_write(cbn_handle_t handle, const void *buffer, size_t len, 
 cbn_status_t sys_cbn_read(cbn_handle_t handle, void *buffer, size_t len, size_t *read);
 cbn_status_t sys_cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
 cbn_status_t sys_cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
+cbn_status_t sys_cbn_vmo_create(size_t size, cbn_handle_t *out);
+cbn_status_t sys_cbn_mmap(cbn_handle_t process_handle, cbn_handle_t vmo_handle, void *hint,
+			    struct __cbn_mmap_packed_args *packed_args, long prot, void **result);
+cbn_status_t sys_cbn_unmap(cbn_handle_t process_handle, void *ptr, size_t length);
 
 namespace x86
 {
@@ -64,7 +68,9 @@ void *syscall_table_64[] =
 	(void *) sys_cbn_open_sys_handle,
 	(void *) sys_cbn_readv,
 	(void *) sys_cbn_writev,
-	(void *) sys_cbn_duplicate_handle
+	(void *) sys_cbn_duplicate_handle,
+	(void *) sys_cbn_vmo_create,
+	(void *) sys_cbn_mmap
 };
 
 extern "C" long do_syscall64(struct syscall_frame *frame)

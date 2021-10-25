@@ -7,6 +7,9 @@
 #ifndef _CARBON_PAIR_H
 #define _CARBON_PAIR_H
 
+namespace cul
+{
+
 template <typename type1, typename type2>
 class pair
 {
@@ -36,6 +39,8 @@ public:
 		   	return true;
 		return false;
 	}
+};
+
 };
 
 #endif

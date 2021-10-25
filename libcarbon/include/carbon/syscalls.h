@@ -27,6 +27,9 @@ cbn_status_t cbn_write(cbn_handle_t handle, const void *buffer, size_t len, size
 cbn_status_t cbn_read(cbn_handle_t handle, void *buffer, size_t len, size_t *read);
 cbn_status_t cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
 cbn_status_t cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res);
+cbn_status_t cbn_vmo_create(size_t size, cbn_handle_t *out);
+cbn_status_t cbn_mmap(cbn_handle_t process_handle, cbn_handle_t vmo_handle, void *hint,
+			     size_t length, size_t off, long flags, long prot, void **result);
 
 #ifdef __cplusplus
 }

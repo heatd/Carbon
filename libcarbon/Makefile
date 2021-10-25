@@ -12,7 +12,7 @@ install: $(BINS)
 	mkdir -p $(DESTDIR)/usr
 	mkdir -p $(DESTDIR)/usr/include
 	mkdir -p $(DESTDIR)/usr/lib
-	cp include/syscalls.h $(DESTDIR)/usr/include/carbon/
+	cp include/carbon/syscalls.h $(DESTDIR)/usr/include/carbon/
 	cp libcarbon.a $(DESTDIR)/usr/lib
 	cp libcarbon.so $(DESTDIR)/usr/lib
 clean:

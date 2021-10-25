@@ -115,7 +115,7 @@ _long_mode:
 	add %rax, %rdx
 	mov (%rdx), %rdi
 	# Say to the BSP that we finished
-	mov $(ap_done - _start_smp), %rbx 
+	mov $(ap_done - _start_smp), %rbx
 	add %rax, %rbx
 	lock incb (%rbx)
 	

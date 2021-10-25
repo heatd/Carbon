@@ -6,6 +6,8 @@
 #include <sys/syscall.h>
 #include <carbon/public/status.h>
 #include <carbon/public/handle.h>
+#include <carbon/public/vm.h>
+
 #include <carbon/syscalls.h>
 
 int main(int argc, char **argv, char **envp)
@@ -21,8 +23,15 @@ int main(int argc, char **argv, char **envp)
 		__asm__ __volatile__("ud2");
 	}*/
 
-	size_t was_read = 0;
-	cbn_write(_stdout, "Hello userspace!\n", strlen("Hello userspace!\n"), &was_read);
 	printf("Hello World!\n");
+	
+	cbn_handle_t vmo_handle = 0;
+	printf("Error %d\n", cbn_vmo_create(0x400000, &vmo_handle));
+	printf("vmo handle %lx\n", vmo_handle);
+	void *r = NULL;
+	cbn_mmap(-1, vmo_handle, (void *) 0x7700000000, 0x400000, MAP_FLAG_FIXED, 0, MAP_PROT_WRITE, &r);
+	printf("Result: %p\n", r);
+	memset(r, 0xff, 0x400000);
 
+	return 0;
 }

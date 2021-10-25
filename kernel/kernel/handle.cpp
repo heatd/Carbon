@@ -144,6 +144,7 @@ bool handle_table::emplace_handle(handle *hndl, cbn_handle_t dst, shared_ptr<han
 
 process *get_process_from_handle(cbn_handle_t process_handle)
 {
+	/* TODO: Unsafe, race condition, should use shared_ptr */
 	auto current = get_current_process();
 	auto &current_handle_table = current->get_handle_table();
 

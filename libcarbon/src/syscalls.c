@@ -3,10 +3,11 @@
 * This file is part of Carbon, and is released under the terms of the MIT License
 * check LICENSE at the root directory for more information
 */
-#include "../include/syscalls.h"
+#include "../include/carbon/syscalls.h"
 #define _GNU_SOURCE
 #include <bits/syscall.h>
 #include <unistd.h>
+#include <carbon/public/vm.h>
 
 long set_tid_address(int *ptr)
 {
@@ -55,4 +56,21 @@ cbn_status_t cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccn
 cbn_status_t cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res)
 {
 	return syscall(SYS_cbn_readv, handle, iovs, veccnt, res);
+}
+
+cbn_status_t cbn_vmo_create(size_t size, cbn_handle_t *out)
+{
+	return syscall(SYS_cbn_vmo_create, size, out);
+}
+
+cbn_status_t cbn_mmap(cbn_handle_t process_handle, cbn_handle_t vmo_handle, void *hint,
+			     size_t length, size_t off, long flags, long prot, void **result)
+{
+	struct __cbn_mmap_packed_args args;
+	args.flags = flags;
+	args.length = length;
+	args.off = off;
+	/* We need this struct because of the argument limit */
+
+	return syscall(SYS_cbn_mmap, process_handle, vmo_handle, hint, &args, prot, result);
 }

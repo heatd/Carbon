@@ -26,7 +26,7 @@ private:
 
 	const array<uint8_t, elf_signature_size> signature;
 	cbn_status_t get_phdrs(const Elf64_Ehdr *file_header,
-			       fs::auto_inode& ino, vector<Elf64_Phdr>& buf) const;
+			       fs::auto_inode& ino, cul::vector<Elf64_Phdr>& buf) const;
 	static void destroy_auxv(void *_auxv);
 public:
 	/* binary_loader interface */
@@ -42,7 +42,7 @@ public:
 static elf_loader __elf_loader{};
 
 cbn_status_t elf_loader::get_phdrs(const Elf64_Ehdr *file_header, fs::auto_inode& ino,
-				   vector<Elf64_Phdr>& buf) const
+				   cul::vector<Elf64_Phdr>& buf) const
 {
 	auto size = file_header->e_phnum * file_header->e_phentsize;
 
@@ -107,7 +107,7 @@ cbn_status_t elf_loader::load(fs::auto_inode& file, program_loader::binary_info&
 		return errno_to_cbn_status_t(errno);
 	}
 
-	vector<Elf64_Phdr> phdrs{};
+	cul::vector<Elf64_Phdr> phdrs{};
 
 	auto status = get_phdrs(const_cast<const Elf64_Ehdr *> (header.get_data()), file, phdrs);
 	if(status != CBN_STATUS_OK)

@@ -29,6 +29,8 @@ int kernel_init(struct boot_info *info)
 	initrd_init(info->modules);
 
 	shared_ptr<process_namespace> first_namespace = make_shared<process_namespace>(0);
+	assert(first_namespace != nullptr);
+
 	cbn_status_t st;
 
 	int argc = 1;

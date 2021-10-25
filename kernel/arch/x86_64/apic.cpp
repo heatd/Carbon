@@ -47,7 +47,7 @@ struct InterruptOverride
 };
 
 static size_t nr_overrides = 0;
-static vector<InterruptOverride> overrides{};
+static cul::vector<InterruptOverride> overrides{};
 
 uint32_t IoApic::Read(uint32_t reg)
 {
@@ -162,7 +162,7 @@ IoApic* GsiToApic(Gsi gsi)
 }
 
 static unsigned int nr_cpus = 0;
-static vector<UINT8> lapic_ids{};
+static cul::vector<UINT8> lapic_ids{};
 void ParseMadt()
 {
 	auto madt = Acpi::GetMadt();

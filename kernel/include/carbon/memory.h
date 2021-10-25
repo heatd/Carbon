@@ -42,11 +42,11 @@ void flush_tlb(void *addr, size_t nr_pages);
 
 void malloc_reserve_memory_space(void);
 
-static inline void *page_align_up(void *ptr)
+inline unsigned long page_align_up(unsigned long ptr)
 {
 	uintptr_t i = (uintptr_t) ptr;
 	i = (i + PAGE_SIZE-1) & -PAGE_SIZE;
-	return (void *) i;
+	return i;
 }
 
 static inline size_t size_to_pages(size_t size)

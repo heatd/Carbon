@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <libgen.h>
+#include <stdlib.h>
 
 #include <carbon/fs/vfs.h>
 #include <carbon/filesystem.h>
@@ -79,7 +80,7 @@ inode* create(const char *path, mode_t mode, inode* ino)
 
 	if(!direntry)
 	{
-		delete path_dup;
+		free((void *) path_dup);
 		return nullptr;
 	}
 
@@ -91,14 +92,14 @@ inode* create(const char *path, mode_t mode, inode* ino)
 	auto name = strdup(basename(path_dup));
 	if(!name)
 	{
-		delete path_dup;
+		free((void *) path_dup);
 		return nullptr;
 	}
 
 	dentry *d = new dentry(name, nullptr);
 	if(!d)
 	{
-		delete path_dup;
+		free((void *) path_dup);
 		delete d;
 		return nullptr;
 	}
@@ -108,7 +109,7 @@ inode* create(const char *path, mode_t mode, inode* ino)
 	if(!direntry->add_dentry_unlocked(d))
 	{
 		delete d;
-		delete name;
+		free((void *) path_dup);
 		return nullptr;
 	}
 
@@ -117,7 +118,7 @@ inode* create(const char *path, mode_t mode, inode* ino)
 	{
 		d->remove_from_parent_unlocked();
 		delete d;
-		delete path_dup;
+		free((void *) path_dup);
 		return nullptr;
 	}
 
@@ -127,6 +128,8 @@ inode* create(const char *path, mode_t mode, inode* ino)
 		new_inode->i_dentry = d;
 
 	d->unlock_dir();
+
+	free((void *) path_dup);
 
 	return new_inode;
 }

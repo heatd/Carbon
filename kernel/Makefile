@@ -39,7 +39,9 @@ endif
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
 CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D ACPI_LIBRARY -D ACPI_DEBUG_OUTPUT=1 \
--I/usr/include/efi -I/usr/include/efi/x86_64 -I/usr/include/efi/protocol # Needed for EFI
+-I/usr/include/efi -I/usr/include/efi/x86_64 -I/usr/include/efi/protocol \
+-fno-pic -fno-pie
+
 LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS) -fwhole-program
 LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS) -lk -lgcc
 ACPICA_CFLAGS:=$(filter-out -fsanitize=undefined -fsanitize=address -Werror, $(CFLAGS))
@@ -68,9 +70,9 @@ $(filter-out $(ARCHDIR)/crtn.o, $(filter-out $(ARCHDIR)/crti.o, \
 $(patsubst %.S,%.o,$(wildcard $(ARCHDIR)/*.S))))
 
 CRTI_OBJ:=$(ARCHDIR)/crti.o
-CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=crtbegin.o)
-CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=crtend.o)
-LIBGCC_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=large -print-file-name=libgcc.a)
+CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=kernel -print-file-name=crtbeginS.o)
+CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=kernel -print-file-name=crtendS.o)
+LIBGCC_OBJ:=$(shell $(CC) $(CFLAGS) $(LDFLAGS) -mcmodel=kernel -print-file-name=libgcc.a)
 CRTN_OBJ:=$(ARCHDIR)/crtn.o
 
 ALL_OUR_OBJS:=\
@@ -86,7 +88,11 @@ $(CRTEND_OBJ) \
 $(CRTN_OBJ) \
 $(objs-y)
 
-CLANG_TIDY_CHECKS:="performance*, modernize-pass-by-value"
+CLANG_TIDY_CHECKS:="performance*, modernize-pass-by-value, readability*, misc*, \
+		-readability-implicit-bool-conversion, -readability-braces-around-statements, \
+		-readability-else-after-return, -readability-isolate-declaration, \
+		-readability-magic-numbers"
+
 all: onyx-vdso.so.0 carbon
 
 .PHONY: all clean install install-headers install-kernel kernel-modules drivers

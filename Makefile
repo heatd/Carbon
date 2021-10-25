@@ -37,6 +37,8 @@ all: iso
 
 clean:
 	for module in $(ALL_MODULES); do $(MAKE) -C $$module clean; done
+	$(MAKE) -C musl clean
+	$(MAKE) -C libcarbon clean
 
 build-prep:
 	mkdir -p sysroot

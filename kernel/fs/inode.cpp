@@ -249,7 +249,7 @@ cbn_status_t sys_cbn_read(cbn_handle_t handle, void *buffer, size_t len, size_t 
 
 cbn_status_t sys_cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res)
 {
-	vector<struct iovec> kiov{};
+	cul::vector<struct iovec> kiov{};
 	if(!kiov.alloc_buf(veccnt * sizeof(struct iovec)))
 		return CBN_STATUS_OUT_OF_MEMORY;
 	
@@ -287,7 +287,10 @@ cbn_status_t sys_cbn_writev(cbn_handle_t handle, const struct iovec *iovs, int v
 
 cbn_status_t sys_cbn_readv(cbn_handle_t handle, const struct iovec *iovs, int veccnt, size_t *res)
 {
-	vector<struct iovec> kiov{};
+	/* TODO: Denial of service attack here? - Maybe we should just
+	 * copy one iovec at a time, while decrementing veccnt */
+
+	cul::vector<struct iovec> kiov{};
 	if(!kiov.alloc_buf(veccnt * sizeof(struct iovec)))
 		return CBN_STATUS_OUT_OF_MEMORY;
 	

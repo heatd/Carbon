@@ -8,11 +8,17 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <carbon/vm.h>
 #include <carbon/memory.h>
 #include <carbon/panic.h>
 #include <carbon/vmobject.h>
+#include <carbon/syscall_utils.h>
+#include <carbon/fs/file.h>
+
+#include <carbon/public/vm.h>
 
 #include <libdict/dict.h>
 
@@ -161,7 +167,7 @@ void vm_destroy_region(struct address_space *as, struct vm_region *region)
 	vm_remove_region(as, region);	
 	/* Slowly destroy the vm region object now */
 	if(region->vmo)
-		delete region->vmo;
+		region->vmo->unref();
 
 	free(region);
 }
@@ -262,6 +268,7 @@ enum VmFaultStatus VmFault::TryToMapPage(struct vm_region *region)
 	auto vmo = region->vmo;
 	unsigned long fault_addr_aligned = fault_address & ~(PAGE_SIZE - 1);
 	size_t vmo_off = fault_addr_aligned - region->start + region->off;
+	vmo_off &= ~(PAGE_SIZE - 1);
 	size_t off = fault_addr_aligned - region->start;
 	
 	auto page = vmo->get(vmo_off);
@@ -538,4 +545,191 @@ void *map_file(struct address_space *as, void *addr_hint,
 	return (void *) region->start;
 }
 
+bool is_region_span_free_unlocked(struct address_space *as, void *__start, size_t length)
+{
+	rb_itor it{as->area_tree, nullptr};
+	unsigned long start = (unsigned long) __start;
+	unsigned long end = start + length;
+
+	if(!rb_itor_search_ge(&it, __start))
+		return true;
+
+	struct vm_region *region = (struct vm_region *) *rb_itor_datum(&it);
+	if(region->start >= end)
+		return true;
+	return false;
+}
+
+bool is_valid_user_range(struct address_space *as, unsigned long addr, unsigned long length)
+{
+	if((unsigned long) vm::limits::user_min > addr)
+		return false;
+	if((unsigned long) vm::limits::user_max < addr)
+		return false;
+	if(as->start > addr)
+		return false;
+	if(as->end < addr)
+		return false;
+	if(as->end < (addr + length))
+		return false;
+
+	return true;
+}
+
+}
+
+cbn_status_t cbn_mmap_get_vm_object_for_map(cbn_handle_t vmo_handle, long flags,
+					   vm_object*& target_vmo)
+{
+	if(flags & MAP_FLAG_FILE)
+	{
+		/* Note: handle points to file class, file class(which is kinda the same as a
+		 * file description) points to the inode, inode has a vm object that
+		 * is allocated on demand.
+		*/
+		auto f = get_handle_from_handle_id(vmo_handle, handle::file_object_type);
+		if(!f)
+			return CBN_STATUS_INVALID_HANDLE;
+	
+		file *_file = static_cast<file *>(f->get_object());
+		auto ino = _file->get_inode();
+
+		if(!S_ISREG(ino->i_mode))
+			return CBN_STATUS_INVALID_HANDLE;
+
+		/* TODO: Add a lock for the ino since this needs to be atomic */
+		if(!ino->create_vmobject_if_needed())
+			return CBN_STATUS_OUT_OF_MEMORY;
+		
+		ino->ref();
+		ino->i_pages->ref();
+		target_vmo = ino->i_pages;
+	}
+	else
+	{
+		auto h = get_handle_from_handle_id(vmo_handle, handle::vmo_object_type);
+		if(!h)
+			return CBN_STATUS_INVALID_HANDLE;
+		
+		target_vmo = static_cast<vm_object *>(h->get_object());
+		target_vmo->ref();
+	}
+
+	return CBN_STATUS_OK;
+}
+
+constexpr unsigned long cbn_mmap_to_vm_prots(long prot)
+{
+	/* TODO: Implement MAP_PROT_READ */
+	return ((prot & MAP_PROT_EXEC) ? VM_PROT_EXEC : 0) |
+	       ((prot & MAP_PROT_WRITE) ? VM_PROT_WRITE : 0) |
+		VM_PROT_USER;
+}
+
+cbn_status_t cbn_mmap_in_place(address_space *address_space, void *hint, size_t length, size_t off,
+			      long prot, vm_region *&out_region)
+{
+	/* Check for page alignment */
+	if((unsigned long) hint & (PAGE_SIZE-1))
+		return CBN_STATUS_INVALID_ARGUMENT;
+
+	if(!Vm::is_valid_user_range(address_space, (unsigned long) hint, length))
+		return CBN_STATUS_INVALID_ARGUMENT;
+
+	if(Vm::is_region_span_free_unlocked(address_space, hint, length))
+	{
+		/* If its free, map where we want it to, else fail */
+		auto reg = vm_reserve_region(address_space, (unsigned long) hint, length);
+		if(!reg)
+			return CBN_STATUS_OUT_OF_MEMORY;
+
+		reg->perms = cbn_mmap_to_vm_prots(prot);
+		reg->off = off;
+		out_region = reg;
+		return CBN_STATUS_OK;
+	}
+	else
+		return CBN_STATUS_OUT_OF_MEMORY;
+		
+}
+cbn_status_t cbn_mmap_create_vmregion(process *target, void *hint, size_t length,
+				   size_t off, long flags, long prot, vm_region *&out_region)
+{
+	auto address_space = &target->address_space;
+	scoped_spinlock guard{&address_space->lock};
+	cbn_status_t st = 0;
+
+	bool fixed = flags & MAP_FILE_FIXED;
+	
+	length = page_align_up(length);
+
+	if(fixed)
+	{
+		/* If it's fixed and the in place mapping fails, error out */
+		if((st = cbn_mmap_in_place(address_space, hint, length, off,
+			prot, out_region)) != CBN_STATUS_OK)
+		{
+			return st;
+		}
+	}
+
+	if(hint != nullptr)
+	{
+		if((st = cbn_mmap_in_place(address_space, hint, length, off,
+			prot, out_region)) == CBN_STATUS_OK)
+		{
+			return st;
+		}
+	}
+
+	struct vm_region *region = Vm::AllocateRegionInternal(address_space,
+					address_space->start,
+					length);
+	if(!region)
+		return CBN_STATUS_OUT_OF_MEMORY;
+	region->perms = cbn_mmap_to_vm_prots(prot);
+	region->off = off;
+	out_region = region;
+	return CBN_STATUS_OK;
+}
+
+cbn_status_t sys_cbn_mmap(cbn_handle_t process_handle, cbn_handle_t vmo_handle, void *hint,
+			     struct __cbn_mmap_packed_args *packed_args, long prot, void **result)
+{
+	using namespace vm;
+	using namespace Vm;
+
+	/* We need this struct because of the argument limit(6) */
+	__cbn_mmap_packed_args kargs;
+	if(copy_from_user(&kargs, packed_args, sizeof(kargs)) < 0)
+		return CBN_STATUS_SEGFAULT;
+	
+	auto target_process = get_process_from_handle(process_handle);
+	cbn_status_t st = CBN_STATUS_OK;
+
+	if(!target_process)
+		return CBN_STATUS_INVALID_HANDLE;
+	
+	vm_object *target_vmo = nullptr;
+
+	if((st = cbn_mmap_get_vm_object_for_map(vmo_handle, kargs.flags, target_vmo)) != CBN_STATUS_OK)
+		return CBN_STATUS_OK;
+
+	vm_region *region = nullptr;
+	if((st = cbn_mmap_create_vmregion(target_process, hint, kargs.length,
+					 kargs.off, kargs.flags, prot, region)) != CBN_STATUS_OK)
+	{
+		target_vmo->unref();
+		return st;
+	}
+
+	region->vmo = target_vmo;
+
+	if(copy_to_user(result, &region->start, sizeof(void *)) < 0)
+	{
+		vm_destroy_region(&target_process->address_space, region);
+		return CBN_STATUS_SEGFAULT;
+	}
+
+	return CBN_STATUS_OK;
 }

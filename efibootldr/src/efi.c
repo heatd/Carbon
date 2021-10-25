@@ -198,6 +198,24 @@ int initialize_graphics(EFI_SYSTEM_TABLE *SystemTable)
 
 void *elf_load(void *buffer, size_t size);
 
+UINT64 get_time(EFI_RUNTIME_SERVICES *rs)
+{
+	// this is not good
+	EFI_TIME t0;
+	UINT64 timestamp;
+	EFI_STATUS st = rs->GetTime(&t0, NULL);
+
+	if (EFI_ERROR(st))
+	{
+		return 0;
+	}
+
+	timestamp = t0.Nanosecond + t0.Second * 1000000000 + t0.Minute * 6000000000 +
+	            t0.Hour * 6000000000 * 3600;
+	
+	return timestamp;
+}
+
 void *load_kernel(EFI_FILE *root, EFI_SYSTEM_TABLE *SystemTable)
 {
 	EFI_STATUS st;
@@ -206,17 +224,29 @@ void *load_kernel(EFI_FILE *root, EFI_SYSTEM_TABLE *SystemTable)
 	void *buffer;
 	UINTN size;
 	EFI_FILE_INFO *info;
+	UINT64 t0, t1;
+
+	EFI_RUNTIME_SERVICES *rs = SystemTable->RuntimeServices;
+
+	t0 = get_time(rs);
+
 	if((st = root->Open(root, &kernel, L"carbon", EFI_FILE_MODE_READ, 0)) != EFI_SUCCESS)
 	{
 		Print(L"Error: Open(): Could not open carbon - error code 0x%x\n", st);
 		return NULL;
 	}
+
+	t1 = get_time(rs);
+
+	Print(L"Open took %lu ms\n", (t1 - t0) / 1000000);
+
 	if((st = SystemTable->BootServices->AllocatePool(EfiLoaderData,
 		sizeof(EFI_FILE_INFO), (void**) &info)) != EFI_SUCCESS)
 	{
 		Print(L"Error: AllocatePool: Could not get memory - error code 0x%x\n", st);
 		return NULL;
 	}
+
 	size = sizeof(EFI_FILE_INFO);
 retry:
 	if((st = kernel->GetInfo(kernel, &file_info, &size, (void*) info)) != EFI_SUCCESS)
@@ -235,6 +265,7 @@ retry:
 		Print(L"Error: GetInfo: Could not get file info - error code 0x%x\n", st);
 		return NULL;
 	}
+
 	size = info->FileSize;
 	if((st = SystemTable->BootServices->AllocatePool(EfiLoaderData, size, &buffer)) != EFI_SUCCESS)
 	{
@@ -242,6 +273,9 @@ retry:
 		Print(L"Error: AllocatePool: Could not get memory - error code 0x%x\n", st);
 		return NULL;
 	}
+
+	t0 = get_time(rs);
+
 	if((st = kernel->Read(kernel, &size, buffer)) != EFI_SUCCESS)
 	{
 		Print(L"Error: Read: Could not read the file - error code 0x%x\n", st);
@@ -249,6 +283,11 @@ retry:
 		SystemTable->BootServices->FreePool(buffer);
 		return NULL;
 	}
+
+	t1 = get_time(rs);
+
+	Print(L"Read of %lu bytes took %lu ms\n", size, (t1 - t0) / 1000000);
+	while(TRUE) {}
 	void *entry_point = elf_load(buffer, size);
 	return entry_point;
 }

@@ -13,7 +13,7 @@
 namespace program_loader
 {
 
-vector<program_loader::binary_loader*> loader_list;
+cul::vector<program_loader::binary_loader*> loader_list;
 rw_lock loader_list_lock;
 
 bool add_loader(binary_loader* loader)

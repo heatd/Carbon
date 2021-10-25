@@ -32,6 +32,8 @@ cbn_status_t file::seek(ssize_t off, unsigned long type, size_t *ret)
 			return CBN_STATUS_INVALID_ARGUMENT;
 	}
 
+	*ret = offset;
+
 	return CBN_STATUS_OK;
 }
 

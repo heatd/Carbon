@@ -20,6 +20,7 @@ private:
 public:
 	static constexpr unsigned long file_object_type = 0x10000;
 	static constexpr unsigned long process_object_type = 0x10001;
+	static constexpr unsigned long vmo_object_type = 0x10002;
 	/* Note: handle::handle() refers the kernel object on its own */
 	handle(refcountable *ko, unsigned long type, process *owner);
 	~handle();
